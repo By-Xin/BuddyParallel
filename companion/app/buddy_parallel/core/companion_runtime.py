@@ -65,8 +65,11 @@ class CompanionRuntime:
         self.logger.info("api event applied session=%s", payload.get("session_id", "default"))
 
     def on_permission_request(self, handler, payload: dict) -> None:
-        request_id = self.permission_bridge.register(handler, payload)
-        self.logger.info("permission pending request_id=%s tool=%s", request_id, payload.get("tool_name", "Unknown"))
+        entry = self.permission_bridge.register(payload)
+        self.logger.info("permission pending request_id=%s tool=%s", entry.request_id, payload.get("tool_name", "Unknown"))
+        decision = self.permission_bridge.wait_for_decision(entry.request_id)
+        self.logger.info("permission resolved request_id=%s decision=%s", entry.request_id, decision)
+        self.permission_bridge.send_hook_response(handler, decision)
 
     def start(self) -> None:
         self.hook_server.start()
@@ -83,6 +86,7 @@ class CompanionRuntime:
 
     def stop(self) -> None:
         self._stop.set()
+        self.permission_bridge.cancel_all()
         self.hook_server.shutdown()
         self.api_server.shutdown()
         self._reset_serial_session()

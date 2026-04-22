@@ -24,7 +24,7 @@ Bootstrap
 ## In progress
 
 - flesh out the companion shell from the current scaffolding
-- wire device-originated permission decisions back into pending host requests
+- validate the permission round-trip against a live board button press through the running companion
 - replace placeholder tray/settings surfaces with real desktop UI
 
 ## Recent progress
@@ -39,17 +39,20 @@ Bootstrap
 - made the repo-local companion launch scripts runnable without pre-installing the package
 - switched the runtime from one-shot serial writes to a persistent serial session with background device reads
 - validated that the runtime now captures device `status` replies into `runtime.json`
+- rewired PermissionRequest handling so the HTTP hook stays pending until a device decision resolves it
 
 ## Latest smoke-test results
 
-- `python -m compileall companion/app` passed after the persistent serial runtime changes
+- `python -m compileall companion/app` passed after the permission bridge changes
 - `python companion/scripts/run_companion.py status` returned a valid snapshot directly from the checkout
 - `python companion/scripts/run_companion.py headless` opened a persistent session on `COM3`
 - posting a local `/state` event updated the runtime heartbeat and `runtime.json`
 - the runtime captured a valid `{"ack":"status",...}` device reply from the attached board on `COM3`
+- in-process permission smoke tests returned `{"hookSpecificOutput":{"permissionDecision":"allow"}}` for a simulated board `once` response
+- in-process permission smoke tests returned `{"hookSpecificOutput":{"permissionDecision":"deny"}}` for a simulated board `deny` response
 - `python -m buddy_parallel.cli hooks` successfully installed BuddyParallel hooks into `~/.claude/settings.json`
 - serial discovery currently sees `COM3` as the likely attached buddy device
-- board-side button-to-host permission resolution is not wired end-to-end yet
+- live board-button permission validation through the running companion is still pending
 
 ## Known decisions
 
