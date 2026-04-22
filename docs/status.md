@@ -24,7 +24,7 @@ Bootstrap
 ## In progress
 
 - flesh out the companion shell from the current scaffolding
-- validate the permission round-trip against a live board button press through the running companion
+- decide whether BLE transport or tray/settings UI should be the next milestone focus
 - replace placeholder tray/settings surfaces with real desktop UI
 
 ## Recent progress
@@ -40,6 +40,7 @@ Bootstrap
 - switched the runtime from one-shot serial writes to a persistent serial session with background device reads
 - validated that the runtime now captures device `status` replies into `runtime.json`
 - rewired PermissionRequest handling so the HTTP hook stays pending until a device decision resolves it
+- validated the live board-button permission round-trip through the running companion on `COM3`
 
 ## Latest smoke-test results
 
@@ -50,9 +51,9 @@ Bootstrap
 - the runtime captured a valid `{"ack":"status",...}` device reply from the attached board on `COM3`
 - in-process permission smoke tests returned `{"hookSpecificOutput":{"permissionDecision":"allow"}}` for a simulated board `once` response
 - in-process permission smoke tests returned `{"hookSpecificOutput":{"permissionDecision":"deny"}}` for a simulated board `deny` response
+- log validation confirmed a live board `{"cmd":"permission","id":"req_1","decision":"once"}` reply resolved a pending `/permission` hook with HTTP 200
 - `python -m buddy_parallel.cli hooks` successfully installed BuddyParallel hooks into `~/.claude/settings.json`
 - serial discovery currently sees `COM3` as the likely attached buddy device
-- live board-button permission validation through the running companion is still pending
 
 ## Known decisions
 
