@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "buddy-parallel-companion"
+version = "0.1.0"
+description = "Python-first companion for BuddyParallel"
+readme = "../README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "requests>=2.32,<3",
+]
+
+[project.optional-dependencies]
+tray = ["pystray>=0.19", "pillow>=10.0"]
+serial = ["pyserial>=3.5"]
+ble = ["bleak>=0.22"]
+
+[tool.setuptools]
+package-dir = {"" = "app"}
+
+[tool.setuptools.packages.find]
+where = ["app"]
