@@ -9,6 +9,7 @@ APP_DIR = Path.home() / "AppData" / "Roaming" / "BuddyParallel"
 CONFIG_PATH = APP_DIR / "config.json"
 LOG_PATH = APP_DIR / "buddy-parallel.log"
 STATE_PATH = APP_DIR / "state.json"
+RUNTIME_PATH = APP_DIR / "runtime.json"
 DEFAULT_UPDATE_MANIFEST_URL = ""
 
 
