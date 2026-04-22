@@ -716,27 +716,27 @@ static void drawClockCard() {
   if (!dataRtcValid()) return;
 
   const Palette& p = characterPalette();
-  const int CARD_Y = 92;
-  const int CARD_H = H - CARD_Y - 8;
-  const int CARD_X = 6;
+  const int FOOTER_H = 3 * 8 + 4;
+  const int CARD_H = 44;
+  const int CARD_X = 16;
   const int CARD_W = W - CARD_X * 2;
+  const int CARD_Y = H - FOOTER_H - CARD_H - 8;
   const int CENTER_X = CARD_X + CARD_W / 2;
+  const int TIME_Y = CARD_Y + 15;
+  const int META_Y = CARD_Y + 35;
 
   char hm[6]; snprintf(hm, sizeof(hm), "%02u:%02u", _clkTm.Hours, _clkTm.Minutes);
-  char ss[4]; snprintf(ss, sizeof(ss), ":%02u", _clkTm.Seconds);
   uint8_t mi = (_clkDt.Month >= 1 && _clkDt.Month <= 12) ? _clkDt.Month - 1 : 0;
-  char dl[16]; snprintf(dl, sizeof(dl), "%s %02u", MON[mi], _clkDt.Date);
-  char wd[8]; snprintf(wd, sizeof(wd), "%s", DOW[clockDow()]);
+  char meta[24]; snprintf(meta, sizeof(meta), "%s %02u  %s", MON[mi], _clkDt.Date, DOW[clockDow()]);
 
+  spr.fillRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 6, p.bg);
   spr.setTextDatum(MC_DATUM);
   spr.setTextColor(p.text, p.bg);
   spr.setTextSize(3);
-  spr.drawString(hm, CENTER_X, CARD_Y + 38);
+  spr.drawString(hm, CENTER_X, TIME_Y);
   spr.setTextSize(1);
   spr.setTextColor(p.textDim, p.bg);
-  spr.drawString(ss, CENTER_X, CARD_Y + 58);
-  spr.drawString(dl, CENTER_X, CARD_Y + 72);
-  spr.drawString(wd, CENTER_X, CARD_Y + 84);
+  spr.drawString(meta, CENTER_X, META_Y);
   spr.setTextDatum(TL_DATUM);
 }
 
@@ -866,11 +866,6 @@ void drawHUD() {
   if (tama.promptId[0]) { drawApproval(); return; }
   if (noticeVisible) { drawNoticeCard(); return; }
   const Palette& p = characterPalette();
-  const int CARD_Y = 92;
-  const int CARD_H = H - CARD_Y - 8;
-  const int CARD_X = 6;
-  const int CARD_W = W - CARD_X * 2;
-  spr.fillRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 6, p.bg);
   drawClockCard();
   const int SHOW = 3, LH = 8, WIDTH = 21;
   const int AREA = SHOW * LH + 4;
