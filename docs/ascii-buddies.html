@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BuddyParallel ASCII Field Guide</title>
+  <style>
+    :root {
+      --paper: #f3ead8;
+      --paper-deep: #e4d0aa;
+      --ink: #1e1b18;
+      --muted: #6f665c;
+      --card: rgba(255, 251, 242, 0.78);
+      --line: rgba(51, 39, 22, 0.14);
+      --shadow: 0 18px 40px rgba(60, 39, 16, 0.14);
+      --accent: #af6135;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.65), transparent 30%),
+        radial-gradient(circle at 85% 15%, rgba(175, 97, 53, 0.18), transparent 20%),
+        linear-gradient(180deg, #f8f1e4 0%, var(--paper) 45%, #eadcc2 100%);
+      font-family: "Aptos", "Segoe UI", sans-serif;
+    }
+
+    main {
+      width: min(1200px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 40px 0 56px;
+    }
+
+    header {
+      margin-bottom: 28px;
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.76), rgba(255, 247, 233, 0.52)),
+        repeating-linear-gradient(
+          -45deg,
+          transparent 0 12px,
+          rgba(175, 97, 53, 0.04) 12px 24px
+        );
+      box-shadow: var(--shadow);
+    }
+
+    h1,
+    h2 {
+      margin: 0;
+      font-family: "Aptos Display", "Georgia", serif;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1.05;
+    }
+
+    .lede {
+      max-width: 760px;
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+
+    .meta {
+      display: inline-flex;
+      margin-top: 18px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.65);
+      border: 1px solid var(--line);
+      color: var(--accent);
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 250px;
+      padding: 18px;
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .card h2 {
+      font-size: 1.2rem;
+    }
+
+    pre {
+      margin: 0;
+      padding: 16px;
+      overflow: auto;
+      border-radius: 16px;
+      background: #1d1d1b;
+      color: #f8f0dd;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+      font-size: 15px;
+      line-height: 1.12;
+    }
+
+    code {
+      font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+      font-size: 0.92em;
+    }
+
+    footer {
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>BuddyParallel ASCII Field Guide</h1>
+      <p class="lede">
+        A quick gallery of the 18 ASCII buddies currently registered in the firmware.
+        Each card shows one representative pose from the current roster.
+      </p>
+      <div class="meta">18 species, one static pose each</div>
+    </header>
+
+    <section class="grid" aria-label="ASCII buddies gallery">
+      <article class="card">
+        <h2>Axolotl</h2>
+        <pre>
+            
+}~(______)~{
+}~( o  o )~{
+  ( .--. )  
+  (_/  \_)  
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Blob</h2>
+        <pre>
+            
+   .----.   
+  ( o  o )  
+  (      )  
+   `----`   
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Cactus</h2>
+        <pre>
+            
+ n  ____  n 
+ | |o  o| | 
+ |_|    |_| 
+   |    |   
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Capybara</h2>
+        <pre>
+            
+  n______n  
+ ( o    o ) 
+ (   oo   ) 
+  `------'  
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Cat</h2>
+        <pre>
+            
+   /\_/\    
+  ( o   o ) 
+  (  w   )  
+  (")_(")   
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Chonk</h2>
+        <pre>
+            
+  /\____/\  
+ ( o    o ) 
+ (   ..   ) 
+  `------'  
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Dragon</h2>
+        <pre>
+            
+  /^\  /^\  
+ &lt;  o    o &gt;
+ (   ww   ) 
+  `-vvvv-'  
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Duck</h2>
+        <pre>
+            
+    __      
+  &lt;(o )___  
+   (  ._&gt;   
+    `--&acute;    
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Ghost</h2>
+        <pre>
+            
+   .----.   
+  ( o    o )
+  |   __   |
+  ~`~``~`~  
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Goose</h2>
+        <pre>
+            
+    (&gt;      
+    ||      
+  _(__)_    
+   ^^^^     
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Mushroom</h2>
+        <pre>
+            
+ .-o-OO-o-. 
+(__________)
+   |o   o|  
+   |____|   
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Octopus</h2>
+        <pre>
+            
+   .----.   
+  ( o  o )  
+  (______)  
+  /\/\/\/\  
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Owl</h2>
+        <pre>
+            
+   /\  /\   
+  ((O)(O))  
+  (  &gt;&lt;  )  
+   `----'   
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Penguin</h2>
+        <pre>
+   .---.    
+  ( o&gt;o )   
+ /(     )\  
+  `-----`   
+   J   L    
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Rabbit</h2>
+        <pre>
+    (\_/)   
+   ( o o )  
+  =(  v  )= 
+   (")_(")  
+            
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Robot</h2>
+        <pre>
+            
+   .[||].   
+  [ o    o ]
+  [ ==== ]  
+  `------'  
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Snail</h2>
+        <pre>
+  \\  /     
+    .--.    
+  _( oo )_  
+ (___@@___) 
+  ~~~~~~~~  
+        </pre>
+      </article>
+
+      <article class="card">
+        <h2>Turtle</h2>
+        <pre>
+            
+   _,--._   
+  ( o    o) 
+ /[______]\ 
+  ``    ``  
+        </pre>
+      </article>
+    </section>
+
+    <footer>
+      Built as a local static preview page for the firmware species registry.
+    </footer>
+  </main>
+</body>
+</html>
