@@ -55,19 +55,23 @@ class CompanionRuntime:
     def on_state_event(self, payload: dict) -> None:
         normalized = normalize_event(payload)
         self.aggregator.apply_event(normalized)
-        if normalized.get("event") in {"SessionEnd", "Stop"}:
+        if normalized.get("event") == "SessionEnd":
             self.permission_bridge.clear_for_session(normalized["session_id"])
+        self._publish_heartbeat()
         self.logger.info("state event session=%s event=%s state=%s", normalized["session_id"], normalized["event"], normalized["state"])
 
     def on_api_event(self, payload: dict) -> None:
         payload.setdefault("source", "api")
         self.aggregator.apply_event(normalize_event(payload))
+        self._publish_heartbeat()
         self.logger.info("api event applied session=%s", payload.get("session_id", "default"))
 
     def on_permission_request(self, handler, payload: dict) -> None:
         entry = self.permission_bridge.register(payload)
+        self._publish_heartbeat()
         self.logger.info("permission pending request_id=%s tool=%s", entry.request_id, payload.get("tool_name", "Unknown"))
         decision = self.permission_bridge.wait_for_decision(entry.request_id)
+        self._publish_heartbeat()
         self.logger.info("permission resolved request_id=%s decision=%s", entry.request_id, decision)
         self.permission_bridge.send_hook_response(handler, decision)
 
@@ -132,9 +136,7 @@ class CompanionRuntime:
 
     def _heartbeat_loop(self) -> None:
         while not self._stop.is_set():
-            heartbeat = self.aggregator.build_heartbeat()
-            self._send_heartbeat(heartbeat)
-            self._write_runtime_snapshot("running")
+            self._publish_heartbeat()
             self._stop.wait(10.0)
 
     def _send_heartbeat(self, heartbeat: dict) -> None:
@@ -201,6 +203,7 @@ class CompanionRuntime:
             decision = str(payload.get("decision") or "")
             if request_id and decision:
                 resolved = self.permission_bridge.resolve_from_device(request_id, decision)
+                self._publish_heartbeat()
                 self.logger.info("device permission request_id=%s decision=%s resolved=%s", request_id, decision, resolved)
             return
 
@@ -210,6 +213,11 @@ class CompanionRuntime:
 
         if isinstance(payload.get("ack"), str):
             self.logger.info("device ack=%s ok=%s", payload.get("ack"), payload.get("ok"))
+
+    def _publish_heartbeat(self) -> None:
+        heartbeat = self.aggregator.build_heartbeat()
+        self._send_heartbeat(heartbeat)
+        self._write_runtime_snapshot("running")
 
     def _write_runtime_snapshot(self, status: str) -> None:
         heartbeat = self.aggregator.build_heartbeat()
