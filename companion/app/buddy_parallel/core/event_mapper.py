@@ -9,7 +9,7 @@ EVENT_TO_STATE = {
     "PreToolUse": "working",
     "PostToolUse": "working",
     "PostToolUseFailure": "error",
-    "Stop": "attention",
+    "Stop": "idle",
     "StopFailure": "error",
     "SubagentStart": "working",
     "SubagentStop": "working",

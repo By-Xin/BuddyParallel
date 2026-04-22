@@ -19,6 +19,9 @@ class AppConfig:
     serial_port: str = ""
     serial_baud: int = 115200
     ble_device_name: str = ""
+    bot_token: str = ""
+    allowed_chat_id: str = ""
+    poll_interval_seconds: int = 3
     hook_server_port: int = 43111
     api_server_port: int = 43112
     owner_name: str = ""
@@ -32,6 +35,8 @@ def validate_config(config: AppConfig) -> AppConfig:
         raise ValueError("transport_mode must be auto, serial, ble, or mock")
     if config.serial_baud <= 0:
         raise ValueError("serial_baud must be positive")
+    if config.poll_interval_seconds <= 0:
+        raise ValueError("poll_interval_seconds must be positive")
     if config.hook_server_port <= 0 or config.api_server_port <= 0:
         raise ValueError("server ports must be positive")
     if config.update_manifest_url:
@@ -48,7 +53,7 @@ class ConfigStore:
     def load(self) -> AppConfig:
         if not self.path.exists():
             return AppConfig()
-        data = json.loads(self.path.read_text(encoding="utf-8"))
+        data = json.loads(self.path.read_text(encoding="utf-8-sig"))
         return validate_config(AppConfig(**{**asdict(AppConfig()), **data}))
 
     def save(self, config: AppConfig) -> None:

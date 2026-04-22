@@ -14,10 +14,18 @@ class PendingPrompt:
     session_id: str = "default"
 
 
+@dataclass
+class TransientEntry:
+    message: str
+    entries: list[str]
+    expires_at: float
+
+
 class StateAggregator:
     def __init__(self) -> None:
         self.sessions: dict[str, SessionSnapshot] = {}
         self.pending_prompt: PendingPrompt | None = None
+        self.transient_entries: list[TransientEntry] = []
         self.tokens = 0
         self.tokens_today = 0
         self.last_completed_at = 0.0
@@ -54,13 +62,28 @@ class StateAggregator:
         elif payload.get("clear_prompt"):
             self.pending_prompt = None
 
+    def post_transient(self, message: str, entries: list[str] | None = None, ttl_seconds: float = 45.0) -> None:
+        expires_at = time() + max(1.0, ttl_seconds)
+        line_items = [str(item) for item in (entries or [])[:8]]
+        self.transient_entries.append(TransientEntry(message=message, entries=line_items, expires_at=expires_at))
+        self._prune_transients()
+
     def build_heartbeat(self) -> dict:
+        self._prune_transients()
         sessions = sorted(self.sessions.values(), key=lambda item: item.updated_at, reverse=True)
         running = sum(1 for session in sessions if session.running)
         waiting = 1 if self.pending_prompt else sum(1 for session in sessions if session.waiting)
         entries: list[str] = []
         if self.pending_prompt:
             entries.append(f"approve: {self.pending_prompt.tool}")
+        for transient in self.transient_entries:
+            if transient.message and transient.message not in entries:
+                entries.append(transient.message)
+            for line in transient.entries:
+                if line not in entries:
+                    entries.append(line)
+            if len(entries) >= 8:
+                break
         for session in sessions:
             if session.message and session.message not in entries:
                 entries.append(session.message)
@@ -86,3 +109,7 @@ class StateAggregator:
                 "hint": self.pending_prompt.hint,
             }
         return heartbeat
+
+    def _prune_transients(self) -> None:
+        now = time()
+        self.transient_entries = [entry for entry in self.transient_entries if entry.expires_at > now]

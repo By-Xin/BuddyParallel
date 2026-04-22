@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from queue import Empty, Queue
 
-from buddy_parallel.transports.base import TransportBase
+from buddy_parallel.transports.base import TransportBase, sanitize_device_payload
 
 try:
     from bleak import BleakClient, BleakScanner
@@ -94,7 +94,7 @@ class BleTransport(TransportBase):
         self._run_async(self._async_write(line.encode("utf-8")), timeout=10.0)
 
     def send_json(self, payload: dict) -> None:
-        self.send_line(json.dumps(payload, ensure_ascii=False) + "\n")
+        self.send_line(json.dumps(sanitize_device_payload(payload), ensure_ascii=True) + "\n")
 
     def read_line(self, timeout: float | None = None) -> str:
         wait_timeout = 0 if timeout is None else timeout

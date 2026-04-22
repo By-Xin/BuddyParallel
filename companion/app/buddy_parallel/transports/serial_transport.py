@@ -5,7 +5,7 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime
 
-from buddy_parallel.transports.base import TransportBase
+from buddy_parallel.transports.base import TransportBase, sanitize_device_payload
 
 try:
     import serial
@@ -94,7 +94,7 @@ class SerialTransport(TransportBase):
             self._serial.flush()
 
     def send_json(self, payload: dict) -> None:
-        self.send_line(json.dumps(payload, ensure_ascii=False) + "\n")
+        self.send_line(json.dumps(sanitize_device_payload(payload), ensure_ascii=True) + "\n")
 
     def read_line(self, timeout: float | None = None) -> str:
         if not self.open():

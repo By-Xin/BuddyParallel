@@ -116,6 +116,10 @@ class CompanionRuntime:
             "device_status": self._last_device_status,
         }
 
+    def post_transient_message(self, message: str, entries: list[str] | None = None, ttl_seconds: float = 45.0) -> None:
+        self.aggregator.post_transient(message=message, entries=entries, ttl_seconds=ttl_seconds)
+        self._publish_heartbeat()
+
     def _serial_loop(self) -> None:
         while not self._stop.is_set():
             if self.config.transport_mode not in {"auto", "serial"}:
@@ -222,7 +226,11 @@ class CompanionRuntime:
     def _write_runtime_snapshot(self, status: str) -> None:
         heartbeat = self.aggregator.build_heartbeat()
         active = self.device_manager.active_name or ""
-        state = RuntimeState(last_transport=active, last_device_id=self._serial.port, last_status=status, last_error="")
+        state = self.state_store.load()
+        state.last_transport = active
+        state.last_device_id = self._serial.port
+        state.last_status = status
+        state.last_error = ""
         self.state_store.save(state)
         write_runtime_config(
             {
