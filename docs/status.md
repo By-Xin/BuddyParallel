@@ -24,7 +24,7 @@ Bootstrap
 ## In progress
 
 - flesh out the companion shell from the current scaffolding
-- decide whether BLE transport or tray/settings UI should be the next milestone focus
+- install and validate the new BLE transport path on this Windows host
 - replace placeholder tray/settings surfaces with real desktop UI
 
 ## Recent progress
@@ -41,10 +41,11 @@ Bootstrap
 - validated that the runtime now captures device `status` replies into `runtime.json`
 - rewired PermissionRequest handling so the HTTP hook stays pending until a device decision resolves it
 - validated the live board-button permission round-trip through the running companion on `COM3`
+- replaced the BLE transport placeholder with an initial NUS client scaffold and status summary path
 
 ## Latest smoke-test results
 
-- `python -m compileall companion/app` passed after the permission bridge changes
+- `python -m compileall companion/app` passed after the BLE transport changes
 - `python companion/scripts/run_companion.py status` returned a valid snapshot directly from the checkout
 - `python companion/scripts/run_companion.py headless` opened a persistent session on `COM3`
 - posting a local `/state` event updated the runtime heartbeat and `runtime.json`
@@ -54,6 +55,7 @@ Bootstrap
 - log validation confirmed a live board `{"cmd":"permission","id":"req_1","decision":"once"}` reply resolved a pending `/permission` hook with HTTP 200
 - `python -m buddy_parallel.cli hooks` successfully installed BuddyParallel hooks into `~/.claude/settings.json`
 - serial discovery currently sees `COM3` as the likely attached buddy device
+- `python companion/scripts/run_companion.py status` now reports BLE install/discovery state; current host reports `installed: false` because `bleak` is not installed yet
 
 ## Known decisions
 

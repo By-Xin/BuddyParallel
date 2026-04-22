@@ -15,7 +15,7 @@ from buddy_parallel.runtime.config import AppConfig
 from buddy_parallel.runtime.logging_utils import configure_logging
 from buddy_parallel.runtime.runtime_config import write_runtime_config
 from buddy_parallel.runtime.state import RuntimeState, StateStore
-from buddy_parallel.transports.ble_transport import BleTransport
+from buddy_parallel.transports.ble_transport import BleTransport, ble_summary
 from buddy_parallel.transports.mock_transport import MockTransport
 from buddy_parallel.transports.serial_transport import SerialTransport, serial_summary
 
@@ -108,6 +108,7 @@ class CompanionRuntime:
             "heartbeat": heartbeat,
             "transport": transport_name,
             "serial": serial_summary(self.config.serial_port),
+            "ble": ble_summary(self.config.ble_device_name),
             "device_status": self._last_device_status,
         }
 
