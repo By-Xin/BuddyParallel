@@ -24,8 +24,8 @@ Bootstrap
 ## In progress
 
 - flesh out the companion shell from the current scaffolding
-- connect tray/headless startup to the shared runtime loop
-- replace placeholder hook installation with a working settings.json updater
+- wire device-originated permission decisions back into pending host requests
+- replace placeholder tray/settings surfaces with real desktop UI
 
 ## Recent progress
 
@@ -36,14 +36,20 @@ Bootstrap
 - expanded serial transport into a reusable handshake/status/heartbeat helper
 - added a CLI entrypoint with `run`, `headless`, `status`, and `hooks` modes
 - replaced the hook installer placeholder with a working `~/.claude/settings.json` updater
-- smoke-tested the companion CLI and hook installation path locally
+- made the repo-local companion launch scripts runnable without pre-installing the package
+- switched the runtime from one-shot serial writes to a persistent serial session with background device reads
+- validated that the runtime now captures device `status` replies into `runtime.json`
 
 ## Latest smoke-test results
 
-- `python -m compileall companion/app` passed
-- `python -m buddy_parallel.cli status` returned a valid snapshot
+- `python -m compileall companion/app` passed after the persistent serial runtime changes
+- `python companion/scripts/run_companion.py status` returned a valid snapshot directly from the checkout
+- `python companion/scripts/run_companion.py headless` opened a persistent session on `COM3`
+- posting a local `/state` event updated the runtime heartbeat and `runtime.json`
+- the runtime captured a valid `{"ack":"status",...}` device reply from the attached board on `COM3`
 - `python -m buddy_parallel.cli hooks` successfully installed BuddyParallel hooks into `~/.claude/settings.json`
 - serial discovery currently sees `COM3` as the likely attached buddy device
+- board-side button-to-host permission resolution is not wired end-to-end yet
 
 ## Known decisions
 

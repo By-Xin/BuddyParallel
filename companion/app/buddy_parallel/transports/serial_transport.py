@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -28,6 +29,7 @@ class SerialTransport(TransportBase):
         self.baud = baud
         self._serial = None
         self._resolved_port = ""
+        self._lock = threading.RLock()
 
     def available(self) -> bool:
         if serial is None:
@@ -57,39 +59,66 @@ class SerialTransport(TransportBase):
     def port(self) -> str:
         return self._resolved_port or self.resolve_port()
 
+    @property
+    def is_open(self) -> bool:
+        with self._lock:
+            return self._serial is not None and getattr(self._serial, "is_open", False)
+
     def open(self) -> bool:
-        if self._serial is not None and getattr(self._serial, "is_open", False):
+        with self._lock:
+            if self._serial is not None and getattr(self._serial, "is_open", False):
+                return True
+            if serial is None:
+                return False
+            path = self.resolve_port()
+            if not path:
+                return False
+            self._serial = serial.Serial(path, self.baud, timeout=0.25, write_timeout=1)
             return True
-        if serial is None:
-            return False
-        path = self.resolve_port()
-        if not path:
-            return False
-        self._serial = serial.Serial(path, self.baud, timeout=1)
-        return True
 
     def close(self) -> None:
-        if self._serial is None:
-            return
-        try:
-            self._serial.close()
-        finally:
-            self._serial = None
+        with self._lock:
+            if self._serial is None:
+                return
+            try:
+                self._serial.close()
+            finally:
+                self._serial = None
 
     def send_line(self, line: str) -> None:
         if not self.open():
             raise RuntimeError("serial transport is unavailable")
-        assert self._serial is not None
-        self._serial.write(line.encode("utf-8"))
+        with self._lock:
+            assert self._serial is not None
+            self._serial.write(line.encode("utf-8"))
+            self._serial.flush()
 
     def send_json(self, payload: dict) -> None:
         self.send_line(json.dumps(payload, ensure_ascii=False) + "\n")
 
-    def read_line(self) -> str:
-        if self._serial is None:
+    def read_line(self, timeout: float | None = None) -> str:
+        if not self.open():
             return ""
-        raw = self._serial.readline()
+        with self._lock:
+            assert self._serial is not None
+            previous_timeout = self._serial.timeout
+            if timeout is not None:
+                self._serial.timeout = timeout
+            try:
+                raw = self._serial.readline()
+            finally:
+                if timeout is not None and self._serial is not None:
+                    self._serial.timeout = previous_timeout
         return raw.decode("utf-8", errors="replace").strip()
+
+    def drain_lines(self, max_lines: int = 20) -> list[str]:
+        lines: list[str] = []
+        for _ in range(max_lines):
+            line = self.read_line(timeout=0.05)
+            if not line:
+                break
+            lines.append(line)
+        return lines
 
     def send_handshake(self, owner_name: str, device_name: str) -> None:
         now = datetime.now().astimezone()
@@ -102,13 +131,17 @@ class SerialTransport(TransportBase):
 
     def request_status(self) -> dict | None:
         self.send_json({"cmd": "status"})
-        line = self.read_line()
-        if not line.startswith("{"):
-            return None
-        try:
-            return json.loads(line)
-        except json.JSONDecodeError:
-            return None
+        for _ in range(12):
+            line = self.read_line(timeout=0.25)
+            if not line or not line.startswith("{"):
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if payload.get("ack") == "status":
+                return payload
+        return None
 
     def __enter__(self) -> "SerialTransport":
         if not self.open():
@@ -145,6 +178,7 @@ def serial_summary(preferred_port: str = "") -> dict:
 
 def send_bootstrap_and_heartbeat(port: str, baud: int, owner_name: str, device_name: str, heartbeat: dict) -> dict:
     with SerialTransport(port=port, baud=baud) as transport:
+        transport.drain_lines()
         transport.send_handshake(owner_name=owner_name, device_name=device_name)
         transport.send_json(heartbeat)
         return {"ok": True, "port": transport.port}

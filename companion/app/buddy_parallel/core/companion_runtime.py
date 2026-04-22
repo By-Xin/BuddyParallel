@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 from dataclasses import dataclass
 from time import sleep
@@ -16,13 +17,14 @@ from buddy_parallel.runtime.runtime_config import write_runtime_config
 from buddy_parallel.runtime.state import RuntimeState, StateStore
 from buddy_parallel.transports.ble_transport import BleTransport
 from buddy_parallel.transports.mock_transport import MockTransport
-from buddy_parallel.transports.serial_transport import SerialTransport, send_bootstrap_and_heartbeat, serial_summary
+from buddy_parallel.transports.serial_transport import SerialTransport, serial_summary
 
 
 @dataclass
 class RuntimeThreads:
     hook_thread: threading.Thread | None = None
     api_thread: threading.Thread | None = None
+    serial_thread: threading.Thread | None = None
     heartbeat_thread: threading.Thread | None = None
 
 
@@ -35,6 +37,9 @@ class CompanionRuntime:
         self.permission_bridge = PermissionBridge(self.aggregator)
         self._stop = threading.Event()
         self._threads = RuntimeThreads()
+        self._serial_session_lock = threading.Lock()
+        self._serial_bootstrapped = False
+        self._last_device_status: dict | None = None
         self._mock = MockTransport()
         self._serial = SerialTransport(port=config.serial_port, baud=config.serial_baud)
         self._ble = BleTransport(device_name=config.ble_device_name)
@@ -68,9 +73,11 @@ class CompanionRuntime:
         self.api_server.start()
         self._threads.hook_thread = threading.Thread(target=self.hook_server.serve_forever, name="hook-server", daemon=True)
         self._threads.api_thread = threading.Thread(target=self.api_server.serve_forever, name="api-server", daemon=True)
+        self._threads.serial_thread = threading.Thread(target=self._serial_loop, name="serial-loop", daemon=True)
         self._threads.heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="heartbeat-loop", daemon=True)
         self._threads.hook_thread.start()
         self._threads.api_thread.start()
+        self._threads.serial_thread.start()
         self._threads.heartbeat_thread.start()
         self._write_runtime_snapshot("running")
 
@@ -78,6 +85,7 @@ class CompanionRuntime:
         self._stop.set()
         self.hook_server.shutdown()
         self.api_server.shutdown()
+        self._reset_serial_session()
         self._write_runtime_snapshot("stopped")
 
     def run_forever(self) -> None:
@@ -91,12 +99,31 @@ class CompanionRuntime:
 
     def snapshot(self) -> dict:
         heartbeat = self.aggregator.build_heartbeat()
-        transport_name = self.device_manager.active_name or self.device_manager.active_transport().name if self.device_manager.active_transport() else ""
+        transport_name = self.device_manager.active_name or (self._serial.name if self._serial.is_open else "")
         return {
             "heartbeat": heartbeat,
             "transport": transport_name,
             "serial": serial_summary(self.config.serial_port),
+            "device_status": self._last_device_status,
         }
+
+    def _serial_loop(self) -> None:
+        while not self._stop.is_set():
+            if self.config.transport_mode not in {"auto", "serial"}:
+                self._stop.wait(1.0)
+                continue
+            try:
+                if not self._ensure_serial_session():
+                    self.device_manager.active_name = ""
+                    self._stop.wait(1.0)
+                    continue
+                line = self._serial.read_line(timeout=0.25)
+                if line:
+                    self._handle_device_line(line)
+            except Exception as exc:
+                self.logger.warning("serial loop failed: %s", exc)
+                self._reset_serial_session()
+                self._stop.wait(1.0)
 
     def _heartbeat_loop(self) -> None:
         while not self._stop.is_set():
@@ -111,22 +138,73 @@ class CompanionRuntime:
             self.device_manager.active_name = self._mock.name
             return
 
-        if self.config.transport_mode in {"auto", "serial"} and self._serial.available():
+        if self.config.transport_mode in {"auto", "serial"}:
             try:
-                send_bootstrap_and_heartbeat(
-                    port=self._serial.port,
-                    baud=self.config.serial_baud,
-                    owner_name=self.config.owner_name,
-                    device_name=self.config.device_name,
-                    heartbeat=heartbeat,
-                )
-                self.device_manager.active_name = self._serial.name
-                return
+                if self._ensure_serial_session():
+                    self._serial.send_json(heartbeat)
+                    self.device_manager.active_name = self._serial.name
+                    return
             except Exception as exc:
                 self.logger.warning("serial heartbeat failed: %s", exc)
+                self._reset_serial_session()
 
         self._mock.send_json(heartbeat)
         self.device_manager.active_name = self._mock.name
+
+    def _ensure_serial_session(self) -> bool:
+        if self.config.transport_mode not in {"auto", "serial"}:
+            return False
+        if not self._serial.available():
+            return False
+        with self._serial_session_lock:
+            if self._serial_bootstrapped and self._serial.is_open:
+                return True
+            if not self._serial.open():
+                return False
+            sleep(1.5)
+            boot_lines = self._serial.drain_lines()
+            for line in boot_lines:
+                self.logger.info("device boot line %s", line)
+            self._serial.send_handshake(owner_name=self.config.owner_name, device_name=self.config.device_name)
+            self.device_manager.active_name = self._serial.name
+            self._serial_bootstrapped = True
+            self.logger.info("serial transport connected on %s", self._serial.port)
+            status = self._serial.request_status()
+            if status:
+                self._last_device_status = status
+                self.logger.info("device status received on %s", self._serial.port)
+            return True
+
+    def _reset_serial_session(self) -> None:
+        with self._serial_session_lock:
+            self._serial_bootstrapped = False
+            self._serial.close()
+            if self.device_manager.active_name == self._serial.name:
+                self.device_manager.active_name = ""
+
+    def _handle_device_line(self, line: str) -> None:
+        self.logger.info("device line %s", line)
+        if not line.startswith("{"):
+            return
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            return
+
+        if payload.get("cmd") == "permission":
+            request_id = str(payload.get("id") or "")
+            decision = str(payload.get("decision") or "")
+            if request_id and decision:
+                resolved = self.permission_bridge.resolve_from_device(request_id, decision)
+                self.logger.info("device permission request_id=%s decision=%s resolved=%s", request_id, decision, resolved)
+            return
+
+        if payload.get("ack") == "status":
+            self._last_device_status = payload
+            return
+
+        if isinstance(payload.get("ack"), str):
+            self.logger.info("device ack=%s ok=%s", payload.get("ack"), payload.get("ok"))
 
     def _write_runtime_snapshot(self, status: str) -> None:
         heartbeat = self.aggregator.build_heartbeat()
@@ -139,5 +217,6 @@ class CompanionRuntime:
                 "api_server_port": self.config.api_server_port,
                 "transport": active,
                 "heartbeat": heartbeat,
+                "device_status": self._last_device_status,
             }
         )
