@@ -55,7 +55,7 @@ class CompanionRuntime:
     def on_state_event(self, payload: dict) -> None:
         normalized = normalize_event(payload)
         self.aggregator.apply_event(normalized)
-        if normalized.get("event") in {"SessionEnd", "Stop", "PostToolUse", "PostToolUseFailure"}:
+        if normalized.get("event") in {"SessionEnd", "Stop"}:
             self.permission_bridge.clear_for_session(normalized["session_id"])
         self.logger.info("state event session=%s event=%s state=%s", normalized["session_id"], normalized["event"], normalized["state"])
 
