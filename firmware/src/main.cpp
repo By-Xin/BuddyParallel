@@ -84,6 +84,7 @@ static void nextPet() {
 uint32_t wakeTransitionUntil = 0;
 const uint32_t SCREEN_OFF_MS = 30000;
 const uint32_t CLOCK_IDLE_MS = 60000;
+const uint32_t CLOCK_ENTER_DEBOUNCE_MS = 1500;
 
 bool     napping = false;
 uint32_t napStartMs = 0;
@@ -115,6 +116,7 @@ static void noteActivity(bool wakeScreen = false) {
   if (wakeScreen) wake();
 }
 bool     responseSent = false;
+static uint32_t clockEligibleMs = 0;
 
 static void beep(uint16_t freq, uint16_t dur) {
   if (settings().sound) M5.Beep.tone(freq, dur);
@@ -1185,12 +1187,19 @@ void loop() {
   // Show the clock when nothing is happening — bridge heartbeat alone
   // doesn't count as activity (it's the only way to get the RTC synced).
   bool idleForClock = (now - lastActivityMs) >= CLOCK_IDLE_MS;
-  bool clocking = displayMode == DISP_NORMAL
-               && !menuOpen && !settingsOpen && !resetOpen && !inPrompt
-               && idleForClock
-               && tama.sessionsTotal == 0
-               && tama.sessionsRunning == 0 && tama.sessionsWaiting == 0
-               && dataRtcValid() && _onUsb;
+  bool clockEligible = displayMode == DISP_NORMAL
+                    && !menuOpen && !settingsOpen && !resetOpen && !inPrompt
+                    && idleForClock
+                    && tama.sessionsTotal == 0
+                    && tama.sessionsRunning == 0 && tama.sessionsWaiting == 0
+                    && dataRtcValid() && _onUsb;
+  if (clockEligible) {
+    if (clockEligibleMs == 0) clockEligibleMs = now;
+  } else {
+    clockEligibleMs = 0;
+  }
+  bool clocking = clockEligible
+               && (int32_t)(now - clockEligibleMs) >= (int32_t)CLOCK_ENTER_DEBOUNCE_MS;
   if (clocking) clockUpdateOrient();
   else { clockOrient = 0; orientFrames = 0; paintedOrient = 0; }
   bool landscapeClock = clocking && clockOrient != 0;

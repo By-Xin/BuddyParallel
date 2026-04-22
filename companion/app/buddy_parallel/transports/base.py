@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-UNSUPPORTED_TEXT_PLACEHOLDER = "[unsupported text]"
+UNSUPPORTED_TEXT_PLACEHOLDER = "(>_<) beep beep"
 
 
 def sanitize_device_text(value: str) -> str:
@@ -20,7 +20,7 @@ def sanitize_device_text(value: str) -> str:
         had_unsupported = True
     sanitized = " ".join("".join(ascii_chars).split())
     if sanitized:
-        return f"{sanitized} [filtered]" if had_unsupported else sanitized
+        return f"{sanitized} ^_^ beep beep" if had_unsupported else sanitized
     return UNSUPPORTED_TEXT_PLACEHOLDER if had_unsupported else ""
 
 
