@@ -265,12 +265,29 @@ class BuddyParallelApp:
             )
         )
 
-    def _post_telegram_message(self, message: str, entries: list[str] | None, ttl_seconds: float) -> None:
+    def _post_telegram_message(
+        self,
+        message: str,
+        entries: list[str] | None,
+        ttl_seconds: float,
+        notice_id: str,
+        notice_from: str,
+        notice_body: str,
+        notice_stamp: str,
+    ) -> None:
         with self._runtime_lock:
             runtime = self._runtime
         if runtime is None:
             return
-        runtime.post_transient_message(message=message, entries=entries, ttl_seconds=ttl_seconds)
+        runtime.post_transient_message(
+            message=message,
+            entries=entries,
+            ttl_seconds=ttl_seconds,
+            notice_id=notice_id,
+            notice_from=notice_from,
+            notice_body=notice_body,
+            notice_stamp=notice_stamp,
+        )
         if self._icon is not None:
             self._icon.update_menu()
 

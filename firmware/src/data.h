@@ -19,6 +19,13 @@ struct TamaState {
   char     promptId[40];     // pending permission request ID; empty = no prompt
   char     promptTool[20];
   char     promptHint[44];
+  char     noticeId[40];
+  char     noticeFrom[16];
+  char     noticeBody[92];
+  char     noticeStamp[24];
+  uint8_t  noticeIndex;
+  uint8_t  noticeTotal;
+  uint16_t noticeGen;
 };
 
 // ---------------------------------------------------------------------------
@@ -113,14 +120,58 @@ static void _applyJson(const char* line, TamaState* out) {
     }
     out->nLines = n;
   }
-  JsonObject pr = doc["prompt"];
-  if (!pr.isNull()) {
-    const char* pid = pr["id"]; const char* pt = pr["tool"]; const char* ph = pr["hint"];
-    strncpy(out->promptId,   pid ? pid : "", sizeof(out->promptId)-1);   out->promptId[sizeof(out->promptId)-1]=0;
-    strncpy(out->promptTool, pt  ? pt  : "", sizeof(out->promptTool)-1); out->promptTool[sizeof(out->promptTool)-1]=0;
-    strncpy(out->promptHint, ph  ? ph  : "", sizeof(out->promptHint)-1); out->promptHint[sizeof(out->promptHint)-1]=0;
-  } else {
-    out->promptId[0] = 0; out->promptTool[0] = 0; out->promptHint[0] = 0;
+  JsonObject root = doc.as<JsonObject>();
+  if (root.containsKey("prompt")) {
+    JsonObject pr = root["prompt"].as<JsonObject>();
+    if (!pr.isNull()) {
+      const char* pid = pr["id"]; const char* pt = pr["tool"]; const char* ph = pr["hint"];
+      strncpy(out->promptId,   pid ? pid : "", sizeof(out->promptId)-1);   out->promptId[sizeof(out->promptId)-1]=0;
+      strncpy(out->promptTool, pt  ? pt  : "", sizeof(out->promptTool)-1); out->promptTool[sizeof(out->promptTool)-1]=0;
+      strncpy(out->promptHint, ph  ? ph  : "", sizeof(out->promptHint)-1); out->promptHint[sizeof(out->promptHint)-1]=0;
+    } else {
+      out->promptId[0] = 0; out->promptTool[0] = 0; out->promptHint[0] = 0;
+    }
+  }
+  if (root.containsKey("notice")) {
+    JsonObject nt = root["notice"].as<JsonObject>();
+    if (!nt.isNull()) {
+      const char* id = nt["id"];
+      const char* from = nt["from"];
+      const char* body = nt["body"];
+      const char* stamp = nt["stamp"];
+      uint8_t index = nt["index"] | 1;
+      uint8_t total = nt["total"] | 1;
+      char nextId[sizeof(out->noticeId)] = {0};
+      char nextFrom[sizeof(out->noticeFrom)] = {0};
+      char nextBody[sizeof(out->noticeBody)] = {0};
+      char nextStamp[sizeof(out->noticeStamp)] = {0};
+      strncpy(nextId, id ? id : "", sizeof(nextId) - 1);
+      strncpy(nextFrom, from ? from : "", sizeof(nextFrom) - 1);
+      strncpy(nextBody, body ? body : "", sizeof(nextBody) - 1);
+      strncpy(nextStamp, stamp ? stamp : "", sizeof(nextStamp) - 1);
+      if (strcmp(out->noticeId, nextId) != 0
+          || strcmp(out->noticeFrom, nextFrom) != 0
+          || strcmp(out->noticeBody, nextBody) != 0
+          || strcmp(out->noticeStamp, nextStamp) != 0
+          || out->noticeIndex != index
+          || out->noticeTotal != total) {
+        out->noticeGen++;
+      }
+      strncpy(out->noticeId, nextId, sizeof(out->noticeId) - 1); out->noticeId[sizeof(out->noticeId)-1]=0;
+      strncpy(out->noticeFrom, nextFrom, sizeof(out->noticeFrom) - 1); out->noticeFrom[sizeof(out->noticeFrom)-1]=0;
+      strncpy(out->noticeBody, nextBody, sizeof(out->noticeBody) - 1); out->noticeBody[sizeof(out->noticeBody)-1]=0;
+      strncpy(out->noticeStamp, nextStamp, sizeof(out->noticeStamp) - 1); out->noticeStamp[sizeof(out->noticeStamp)-1]=0;
+      out->noticeIndex = index;
+      out->noticeTotal = total;
+    } else {
+      if (out->noticeId[0] || out->noticeFrom[0] || out->noticeBody[0] || out->noticeStamp[0]) out->noticeGen++;
+      out->noticeId[0] = 0;
+      out->noticeFrom[0] = 0;
+      out->noticeBody[0] = 0;
+      out->noticeStamp[0] = 0;
+      out->noticeIndex = 0;
+      out->noticeTotal = 0;
+    }
   }
   out->lastUpdated = millis();
   _lastLiveMs = millis();

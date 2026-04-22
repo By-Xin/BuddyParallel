@@ -116,8 +116,25 @@ class CompanionRuntime:
             "device_status": self._last_device_status,
         }
 
-    def post_transient_message(self, message: str, entries: list[str] | None = None, ttl_seconds: float = 45.0) -> None:
-        self.aggregator.post_transient(message=message, entries=entries, ttl_seconds=ttl_seconds)
+    def post_transient_message(
+        self,
+        message: str,
+        entries: list[str] | None = None,
+        ttl_seconds: float = 45.0,
+        notice_id: str = "",
+        notice_from: str = "",
+        notice_body: str = "",
+        notice_stamp: str = "",
+    ) -> None:
+        self.aggregator.post_transient(
+            message=message,
+            entries=entries,
+            ttl_seconds=ttl_seconds,
+            notice_id=notice_id,
+            notice_from=notice_from,
+            notice_body=notice_body,
+            notice_stamp=notice_stamp,
+        )
         self._publish_heartbeat()
 
     def _serial_loop(self) -> None:
@@ -209,6 +226,15 @@ class CompanionRuntime:
                 resolved = self.permission_bridge.resolve_from_device(request_id, decision)
                 self._publish_heartbeat()
                 self.logger.info("device permission request_id=%s decision=%s resolved=%s", request_id, decision, resolved)
+            return
+
+        if payload.get("cmd") == "notice_ack":
+            notice_id = str(payload.get("id") or "")
+            action = str(payload.get("action") or "")
+            dismissed = self.aggregator.dismiss_notice(notice_id)
+            self._publish_heartbeat()
+            self.logger.info("device notice id=%s action=%s", notice_id, action or "ack")
+            self.logger.info("device notice id=%s dismissed=%s", notice_id, dismissed)
             return
 
         if payload.get("ack") == "status":

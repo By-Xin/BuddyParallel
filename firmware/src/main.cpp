@@ -54,6 +54,8 @@ const uint8_t PET_PAGES = 2;
 uint8_t msgScroll = 0;
 uint16_t lastLineGen = 0;
 char     lastPromptId[40] = "";
+uint16_t lastNoticeGen = 0;
+char     dismissedNoticeId[40] = "";
 uint32_t lastInteractMs = 0;
 uint32_t lastActivityMs = 0;
 bool     dimmed = false;
@@ -777,6 +779,55 @@ static void drawApproval() {
   }
 }
 
+static void drawNoticeCard() {
+  const Palette& p = characterPalette();
+  const int CARD_Y = 92;
+  const int CARD_H = H - CARD_Y - 8;
+  const int CARD_X = 6;
+  const int CARD_W = W - CARD_X * 2;
+  spr.fillRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 6, PANEL);
+  spr.drawRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 6, p.textDim);
+
+  spr.setTextSize(1);
+  spr.setTextColor(p.body, PANEL);
+  spr.setCursor(CARD_X + 8, CARD_Y + 8);
+  spr.print("Message");
+  if (tama.noticeTotal > 1) {
+    spr.setTextColor(p.textDim, PANEL);
+    spr.setCursor(CARD_X + CARD_W - 28, CARD_Y + 8);
+    spr.printf("%u/%u", tama.noticeIndex ? tama.noticeIndex : 1, tama.noticeTotal);
+  }
+
+  spr.setTextColor(p.text, PANEL);
+  spr.setTextSize(2);
+  static char wrapped[10][24];
+  uint8_t lines = wrapInto(tama.noticeBody[0] ? tama.noticeBody : tama.msg, wrapped, 10, 9);
+  uint8_t shown = lines > 5 ? 5 : lines;
+  if (lines > 5 && shown > 0) {
+    char* tail = wrapped[shown - 1];
+    size_t len = strlen(tail);
+    if (len > 3) {
+      tail[len - 3] = '.';
+      tail[len - 2] = '.';
+      tail[len - 1] = '.';
+    }
+  }
+  for (uint8_t i = 0; i < shown; i++) {
+    spr.setCursor(CARD_X + 8, CARD_Y + 24 + i * 18);
+    spr.print(wrapped[i]);
+  }
+
+  spr.setTextSize(1);
+  spr.setTextColor(p.textDim, PANEL);
+  spr.setCursor(CARD_X + 8, CARD_Y + CARD_H - 14);
+  spr.print(tama.noticeStamp);
+  int sigX = CARD_X + CARD_W - 8 - (strlen(tama.noticeFrom[0] ? tama.noticeFrom : "B.Y.") * 6);
+  spr.setCursor(sigX, CARD_Y + CARD_H - 14);
+  spr.print(tama.noticeFrom[0] ? tama.noticeFrom : "B.Y.");
+  spr.setCursor(CARD_X + 8, CARD_Y + CARD_H - 26);
+  spr.print("[B] Read next");
+}
+
 static void tinyHeart(int x, int y, bool filled, uint16_t col) {
   if (filled) {
     spr.fillCircle(x - 2, y, 2, col);
@@ -898,8 +949,16 @@ void drawPet() {
 }
 
 void drawHUD() {
+  bool noticeVisible = (tama.noticeBody[0] || tama.noticeFrom[0] || tama.noticeStamp[0])
+                    && (!tama.noticeId[0] || strcmp(tama.noticeId, dismissedNoticeId) != 0);
   if (tama.promptId[0]) { drawApproval(); return; }
+  if (noticeVisible) { drawNoticeCard(); return; }
   const Palette& p = characterPalette();
+  const int CARD_Y = 92;
+  const int CARD_H = H - CARD_Y - 8;
+  const int CARD_X = 6;
+  const int CARD_W = W - CARD_X * 2;
+  spr.fillRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 6, p.bg);
   const int SHOW = 3, LH = 8, WIDTH = 21;
   const int AREA = SHOW * LH + 4;
   spr.fillRect(0, H - AREA, W, AREA, p.bg);
@@ -1076,8 +1135,27 @@ void loop() {
       if (buddyMode) buddyInvalidate();
     }
   }
+  if (tama.noticeGen != lastNoticeGen) {
+    lastNoticeGen = tama.noticeGen;
+    if (tama.noticeId[0] && strcmp(tama.noticeId, dismissedNoticeId) != 0) {
+      dismissedNoticeId[0] = 0;
+    }
+    if ((tama.noticeBody[0] || tama.noticeFrom[0] || tama.noticeStamp[0])
+        && (!tama.noticeId[0] || strcmp(tama.noticeId, dismissedNoticeId) != 0)) {
+      wake();
+      beep(1800, 30);
+      beep(2200, 30);
+      displayMode = DISP_NORMAL;
+      menuOpen = settingsOpen = resetOpen = false;
+      applyDisplayMode();
+      characterInvalidate();
+      if (buddyMode) buddyInvalidate();
+    }
+  }
 
   bool inPrompt = tama.promptId[0] && !responseSent;
+  bool noticeVisible = (tama.noticeBody[0] || tama.noticeFrom[0] || tama.noticeStamp[0])
+                    && (!tama.noticeId[0] || strcmp(tama.noticeId, dismissedNoticeId) != 0);
 
   // Button-press wake. Track which button woke the screen so its full
   // press cycle (including long-press) is swallowed — you don't want
@@ -1155,6 +1233,15 @@ void loop() {
       responseSent = true;
       statsOnDenial();
       beep(600, 60);
+    } else if (noticeVisible) {
+      if (tama.noticeId[0]) {
+        strncpy(dismissedNoticeId, tama.noticeId, sizeof(dismissedNoticeId) - 1);
+        dismissedNoticeId[sizeof(dismissedNoticeId) - 1] = 0;
+        char cmd[128];
+        snprintf(cmd, sizeof(cmd), "{\"cmd\":\"notice_ack\",\"id\":\"%s\",\"action\":\"read\"}", tama.noticeId);
+        sendCmd(cmd);
+      }
+      beep(2400, 30);
     } else if (resetOpen) {
       beep(2400, 30);
       applyReset(resetSel);
@@ -1188,7 +1275,7 @@ void loop() {
   // doesn't count as activity (it's the only way to get the RTC synced).
   bool idleForClock = (now - lastActivityMs) >= CLOCK_IDLE_MS;
   bool clockEligible = displayMode == DISP_NORMAL
-                    && !menuOpen && !settingsOpen && !resetOpen && !inPrompt
+                    && !menuOpen && !settingsOpen && !resetOpen && !inPrompt && !noticeVisible
                     && idleForClock
                     && tama.sessionsTotal == 0
                     && tama.sessionsRunning == 0 && tama.sessionsWaiting == 0
@@ -1304,7 +1391,7 @@ void loop() {
   // millis() not the cached `now`: wake() runs after `now` is captured,
   // so now - lastInteractMs underflows when a button is held → flicker.
   // No auto-off on USB power — clock face wants to stay visible while charging.
-  if (!screenOff && !inPrompt && !_onUsb
+  if (!screenOff && !inPrompt && !noticeVisible && !_onUsb
       && millis() - lastInteractMs > SCREEN_OFF_MS) {
     M5.Axp.SetLDO2(false);
     screenOff = true;

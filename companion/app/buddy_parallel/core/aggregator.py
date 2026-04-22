@@ -19,6 +19,10 @@ class TransientEntry:
     message: str
     entries: list[str]
     expires_at: float
+    notice_id: str = ""
+    notice_from: str = ""
+    notice_body: str = ""
+    notice_stamp: str = ""
 
 
 class StateAggregator:
@@ -62,11 +66,49 @@ class StateAggregator:
         elif payload.get("clear_prompt"):
             self.pending_prompt = None
 
-    def post_transient(self, message: str, entries: list[str] | None = None, ttl_seconds: float = 45.0) -> None:
+    def post_transient(
+        self,
+        message: str,
+        entries: list[str] | None = None,
+        ttl_seconds: float = 45.0,
+        notice_id: str = "",
+        notice_from: str = "",
+        notice_body: str = "",
+        notice_stamp: str = "",
+    ) -> None:
         expires_at = time() + max(1.0, ttl_seconds)
         line_items = [str(item) for item in (entries or [])[:8]]
-        self.transient_entries.append(TransientEntry(message=message, entries=line_items, expires_at=expires_at))
+        self.transient_entries.append(
+            TransientEntry(
+                message=message,
+                entries=line_items,
+                expires_at=expires_at,
+                notice_id=str(notice_id or "")[:40],
+                notice_from=str(notice_from or "")[:16],
+                notice_body=str(notice_body or "")[:160],
+                notice_stamp=str(notice_stamp or "")[:24],
+            )
+        )
         self._prune_transients()
+
+    def dismiss_notice(self, notice_id: str) -> bool:
+        self._prune_transients()
+        if notice_id:
+            kept: list[TransientEntry] = []
+            removed = False
+            for entry in self.transient_entries:
+                if not removed and entry.notice_id == notice_id:
+                    removed = True
+                    continue
+                kept.append(entry)
+            self.transient_entries = kept
+            return removed
+
+        for index, entry in enumerate(self.transient_entries):
+            if entry.notice_body or entry.notice_from or entry.notice_stamp:
+                del self.transient_entries[index]
+                return True
+        return False
 
     def build_heartbeat(self) -> dict:
         self._prune_transients()
@@ -76,22 +118,30 @@ class StateAggregator:
         entries: list[str] = []
         if self.pending_prompt:
             entries.append(f"approve: {self.pending_prompt.tool}")
+        prominent_notice: TransientEntry | None = None
+        notice_total = 0
         for transient in self.transient_entries:
-            if transient.message and transient.message not in entries:
+            if transient.notice_body or transient.notice_from or transient.notice_stamp:
+                notice_total += 1
+                if prominent_notice is None:
+                    prominent_notice = transient
+            if len(entries) < 8 and transient.message and transient.message not in entries:
                 entries.append(transient.message)
             for line in transient.entries:
+                if len(entries) >= 8:
+                    break
                 if line not in entries:
                     entries.append(line)
+        for session in sessions:
             if len(entries) >= 8:
                 break
-        for session in sessions:
             if session.message and session.message not in entries:
                 entries.append(session.message)
             for line in session.entries:
+                if len(entries) >= 8:
+                    break
                 if line not in entries:
                     entries.append(line)
-            if len(entries) >= 8:
-                break
         heartbeat = {
             "total": len(sessions),
             "running": running,
@@ -101,6 +151,8 @@ class StateAggregator:
             "tokens": self.tokens,
             "tokens_today": self.tokens_today,
             "completed": (time() - self.last_completed_at) < 4,
+            "prompt": None,
+            "notice": None,
         }
         if self.pending_prompt:
             heartbeat["prompt"] = {
@@ -108,8 +160,21 @@ class StateAggregator:
                 "tool": self.pending_prompt.tool,
                 "hint": self.pending_prompt.hint,
             }
+        if prominent_notice is not None:
+            heartbeat["notice"] = {
+                "id": prominent_notice.notice_id,
+                "from": prominent_notice.notice_from,
+                "body": prominent_notice.notice_body,
+                "stamp": prominent_notice.notice_stamp,
+                "index": 1,
+                "total": notice_total,
+            }
         return heartbeat
 
     def _prune_transients(self) -> None:
         now = time()
-        self.transient_entries = [entry for entry in self.transient_entries if entry.expires_at > now]
+        self.transient_entries = [
+            entry
+            for entry in self.transient_entries
+            if (entry.notice_body or entry.notice_from or entry.notice_stamp) or entry.expires_at > now
+        ]

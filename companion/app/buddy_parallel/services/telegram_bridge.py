@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Callable
 
 import requests
@@ -36,7 +37,7 @@ class TelegramBridge:
     def __init__(
         self,
         config_supplier: Callable[[], AppConfig],
-        message_sink: Callable[[str, list[str] | None, float], None],
+        message_sink: Callable[[str, list[str] | None, float, str, str, str, str], None],
         logger: logging.Logger,
         state_store: StateStore,
     ) -> None:
@@ -139,9 +140,15 @@ class TelegramBridge:
             return
 
         title = str(chat.get("title") or chat.get("username") or chat.get("first_name") or "Telegram")
-        summary = f"Telegram: {text[:40]}"
-        lines = [title[:32], text[:90]]
-        self._message_sink(summary, lines, 60.0)
+        stamp = datetime.fromtimestamp(int(message.get("date") or time.time())).strftime("%d %b %H:%M")
+        base_notice_id = f"telegram-{update.get('update_id', message.get('message_id', int(time.time())))}"
+        chunks = self._chunk_notice_text(text)
+        total_chunks = len(chunks)
+        for index, chunk in enumerate(chunks, start=1):
+            summary = f"Message {index}/{total_chunks}: {chunk[:32]}" if total_chunks > 1 else f"Message: {chunk[:40]}"
+            lines = [chunk[:90]]
+            notice_id = f"{base_notice_id}-{index}"
+            self._message_sink(summary, lines, 60.0, notice_id, "B.Y.", chunk, stamp)
 
         now = time.time()
         self._set_status(telegram_ok=True, last_error="", last_message_summary=text[:40])
@@ -151,3 +158,29 @@ class TelegramBridge:
             last_telegram_message_summary=text[:40],
         )
         self._logger.info("Accepted Telegram message from %s", title)
+
+    @staticmethod
+    def _chunk_notice_text(text: str, max_chars: int = 48) -> list[str]:
+        normalized = " ".join(text.split())
+        if not normalized:
+            return ["(>_<) beep beep"]
+
+        chunks: list[str] = []
+        current = ""
+        for word in normalized.split(" "):
+            while len(word) > max_chars:
+                if current:
+                    chunks.append(current)
+                    current = ""
+                chunks.append(word[:max_chars])
+                word = word[max_chars:]
+            candidate = word if not current else f"{current} {word}"
+            if len(candidate) <= max_chars:
+                current = candidate
+            else:
+                if current:
+                    chunks.append(current)
+                current = word
+        if current:
+            chunks.append(current)
+        return chunks or ["(>_<) beep beep"]
