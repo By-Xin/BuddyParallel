@@ -1,4 +1,4 @@
-from buddy_parallel.main import main
+from buddy_parallel.cli import main
 
 
 if __name__ == "__main__":

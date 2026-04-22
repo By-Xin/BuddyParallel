@@ -23,8 +23,27 @@ Bootstrap
 
 ## In progress
 
-- prepare initial commit for the bootstrap state
 - flesh out the companion shell from the current scaffolding
+- connect tray/headless startup to the shared runtime loop
+- replace placeholder hook installation with a working settings.json updater
+
+## Recent progress
+
+- created and pushed the bootstrap baseline commit
+- added a first runnable companion runtime skeleton
+- added event normalization for hook/API events
+- added runtime.json output for local service discovery
+- expanded serial transport into a reusable handshake/status/heartbeat helper
+- added a CLI entrypoint with `run`, `headless`, `status`, and `hooks` modes
+- replaced the hook installer placeholder with a working `~/.claude/settings.json` updater
+- smoke-tested the companion CLI and hook installation path locally
+
+## Latest smoke-test results
+
+- `python -m compileall companion/app` passed
+- `python -m buddy_parallel.cli status` returned a valid snapshot
+- `python -m buddy_parallel.cli hooks` successfully installed BuddyParallel hooks into `~/.claude/settings.json`
+- serial discovery currently sees `COM3` as the likely attached buddy device
 
 ## Known decisions
 
