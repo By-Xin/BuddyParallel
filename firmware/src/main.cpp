@@ -55,6 +55,7 @@ uint8_t msgScroll = 0;
 uint16_t lastLineGen = 0;
 char     lastPromptId[40] = "";
 uint32_t lastInteractMs = 0;
+uint32_t lastActivityMs = 0;
 bool     dimmed = false;
 bool     screenOff = false;
 bool     swallowBtnA = false;
@@ -82,6 +83,7 @@ static void nextPet() {
 }
 uint32_t wakeTransitionUntil = 0;
 const uint32_t SCREEN_OFF_MS = 30000;
+const uint32_t CLOCK_IDLE_MS = 60000;
 
 bool     napping = false;
 uint32_t napStartMs = 0;
@@ -98,6 +100,7 @@ static void applyBrightness() { M5.Axp.ScreenBreath(20 + brightLevel * 20); }
 
 static void wake() {
   lastInteractMs = millis();
+  lastActivityMs = lastInteractMs;
   if (screenOff) {
     M5.Axp.SetLDO2(true);
     applyBrightness();
@@ -105,6 +108,11 @@ static void wake() {
     wakeTransitionUntil = millis() + 12000;
   }
   if (dimmed) { applyBrightness(); dimmed = false; }
+}
+
+static void noteActivity(bool wakeScreen = false) {
+  lastActivityMs = millis();
+  if (wakeScreen) wake();
 }
 bool     responseSent = false;
 
@@ -945,6 +953,7 @@ void setup() {
   digitalWrite(LED_PIN, HIGH);   // off
   applyBrightness();
   lastInteractMs = millis();
+  lastActivityMs = lastInteractMs;
   statsLoad();
   settingsLoad();
   petNameLoad();
@@ -990,8 +999,36 @@ void loop() {
   M5.Beep.update();
   t++;
   uint32_t now = millis();
+  static uint8_t  lastSessionsTotal = 0xFF;
+  static uint8_t  lastSessionsRunning = 0xFF;
+  static uint8_t  lastSessionsWaiting = 0xFF;
+  static bool     lastCompleted = false;
+  static uint16_t lastActivityLineGen = 0xFFFF;
+  static char     lastActivityMsg[24] = "";
+  static char     lastActivityPromptId[40] = "";
 
   dataPoll(&tama);
+  bool bridgeActivity =
+      lastSessionsTotal != tama.sessionsTotal ||
+      lastSessionsRunning != tama.sessionsRunning ||
+      lastSessionsWaiting != tama.sessionsWaiting ||
+      lastCompleted != tama.recentlyCompleted ||
+      lastActivityLineGen != tama.lineGen ||
+      strcmp(lastActivityMsg, tama.msg) != 0 ||
+      strcmp(lastActivityPromptId, tama.promptId) != 0;
+  if (bridgeActivity) {
+    bool wakeScreen = lastActivityLineGen != tama.lineGen || strcmp(lastActivityPromptId, tama.promptId) != 0;
+    noteActivity(wakeScreen);
+    lastSessionsTotal = tama.sessionsTotal;
+    lastSessionsRunning = tama.sessionsRunning;
+    lastSessionsWaiting = tama.sessionsWaiting;
+    lastCompleted = tama.recentlyCompleted;
+    lastActivityLineGen = tama.lineGen;
+    strncpy(lastActivityMsg, tama.msg, sizeof(lastActivityMsg) - 1);
+    lastActivityMsg[sizeof(lastActivityMsg) - 1] = 0;
+    strncpy(lastActivityPromptId, tama.promptId, sizeof(lastActivityPromptId) - 1);
+    lastActivityPromptId[sizeof(lastActivityPromptId) - 1] = 0;
+  }
   if (statsPollLevelUp()) triggerOneShot(P_CELEBRATE, 3000);
   baseState = derive(tama);
 
@@ -1147,8 +1184,11 @@ void loop() {
   clockRefreshRtc();   // 1Hz internal throttle; also caches _onUsb
   // Show the clock when nothing is happening — bridge heartbeat alone
   // doesn't count as activity (it's the only way to get the RTC synced).
+  bool idleForClock = (now - lastActivityMs) >= CLOCK_IDLE_MS;
   bool clocking = displayMode == DISP_NORMAL
                && !menuOpen && !settingsOpen && !resetOpen && !inPrompt
+               && idleForClock
+               && tama.sessionsTotal == 0
                && tama.sessionsRunning == 0 && tama.sessionsWaiting == 0
                && dataRtcValid() && _onUsb;
   if (clocking) clockUpdateOrient();
