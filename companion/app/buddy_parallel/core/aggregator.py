@@ -30,6 +30,7 @@ class StateAggregator:
         self.sessions: dict[str, SessionSnapshot] = {}
         self.pending_prompt: PendingPrompt | None = None
         self.transient_entries: list[TransientEntry] = []
+        self.weather: dict | None = None
         self.tokens = 0
         self.tokens_today = 0
         self.last_completed_at = 0.0
@@ -110,6 +111,23 @@ class StateAggregator:
                 return True
         return False
 
+    def set_weather(self, payload: dict | None) -> None:
+        if not payload:
+            self.weather = None
+            return
+        self.weather = {
+            "location": str(payload.get("location") or "")[:40],
+            "summary": str(payload.get("summary") or "")[:64],
+            "board_summary": str(payload.get("board_summary") or "")[:23],
+            "condition": str(payload.get("condition") or "")[:12],
+            "weather_code": int(payload.get("weather_code") or 0),
+            "current_temp_c": int(payload.get("current_temp_c") or 0),
+            "high_c": int(payload.get("high_c") or 0),
+            "low_c": int(payload.get("low_c") or 0),
+            "precip_probability_pct": int(payload.get("precip_probability_pct") or 0),
+            "updated_at": float(payload.get("updated_at") or 0.0),
+        }
+
     def build_heartbeat(self) -> dict:
         self._prune_transients()
         sessions = sorted(self.sessions.values(), key=lambda item: item.updated_at, reverse=True)
@@ -153,6 +171,7 @@ class StateAggregator:
             "completed": (time() - self.last_completed_at) < 4,
             "prompt": None,
             "notice": None,
+            "weather": None,
         }
         if self.pending_prompt:
             heartbeat["prompt"] = {
@@ -169,6 +188,8 @@ class StateAggregator:
                 "index": 1,
                 "total": notice_total,
             }
+        if self.weather is not None and self.weather.get("board_summary"):
+            heartbeat["weather"] = self.weather
         return heartbeat
 
     def _prune_transients(self) -> None:

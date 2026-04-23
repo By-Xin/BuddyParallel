@@ -15,7 +15,7 @@ class SettingsWindow:
         config = self._config_store.load()
         root = tk.Tk()
         root.title("BuddyParallel Settings")
-        root.geometry("540x520")
+        root.geometry("540x620")
         root.resizable(False, False)
 
         fields = {
@@ -23,6 +23,8 @@ class SettingsWindow:
             "serial_port": tk.StringVar(value=config.serial_port),
             "serial_baud": tk.StringVar(value=str(config.serial_baud)),
             "ble_device_name": tk.StringVar(value=config.ble_device_name),
+            "weather_location_query": tk.StringVar(value=config.weather_location_query),
+            "weather_refresh_minutes": tk.StringVar(value=str(config.weather_refresh_minutes)),
             "bot_token": tk.StringVar(value=config.bot_token),
             "allowed_chat_id": tk.StringVar(value=config.allowed_chat_id),
             "poll_interval_seconds": tk.StringVar(value=str(config.poll_interval_seconds)),
@@ -33,6 +35,7 @@ class SettingsWindow:
             "update_manifest_url": tk.StringVar(value=config.update_manifest_url),
         }
         auto_start = tk.BooleanVar(value=config.auto_start)
+        weather_enabled = tk.BooleanVar(value=config.weather_enabled)
 
         frame = ttk.Frame(root, padding=12)
         frame.pack(fill="both", expand=True)
@@ -42,6 +45,8 @@ class SettingsWindow:
             ("Serial Port", "serial_port"),
             ("Serial Baud", "serial_baud"),
             ("BLE Device Name", "ble_device_name"),
+            ("Weather Location", "weather_location_query"),
+            ("Weather Refresh (min)", "weather_refresh_minutes"),
             ("Telegram Bot Token", "bot_token"),
             ("Allowed Chat ID", "allowed_chat_id"),
             ("Poll Seconds", "poll_interval_seconds"),
@@ -65,19 +70,23 @@ class SettingsWindow:
                 widget = ttk.Entry(frame, textvariable=fields[key], width=42)
             widget.grid(row=row, column=1, sticky="ew", pady=4)
 
+        ttk.Checkbutton(frame, text="Enable weather sync", variable=weather_enabled).grid(
+            row=len(labels), column=1, sticky="w", pady=(8, 4)
+        )
+
         ttk.Label(
             frame,
             text="Leave Update Manifest URL blank to disable manual update checks for now.",
             wraplength=340,
             justify="left",
-        ).grid(row=len(labels), column=1, sticky="w", pady=(8, 4))
+        ).grid(row=len(labels) + 1, column=1, sticky="w", pady=(8, 4))
 
         ttk.Checkbutton(frame, text="Launch at startup (reserved)", variable=auto_start).grid(
-            row=len(labels) + 1, column=1, sticky="w", pady=(4, 12)
+            row=len(labels) + 2, column=1, sticky="w", pady=(4, 12)
         )
 
         button_row = ttk.Frame(frame)
-        button_row.grid(row=len(labels) + 2, column=0, columnspan=2, sticky="ew")
+        button_row.grid(row=len(labels) + 3, column=0, columnspan=2, sticky="ew")
 
         def build_config() -> AppConfig:
             return validate_config(
@@ -86,6 +95,9 @@ class SettingsWindow:
                     serial_port=fields["serial_port"].get().strip(),
                     serial_baud=int(fields["serial_baud"].get().strip() or "115200"),
                     ble_device_name=fields["ble_device_name"].get().strip(),
+                    weather_enabled=bool(weather_enabled.get()),
+                    weather_location_query=fields["weather_location_query"].get().strip(),
+                    weather_refresh_minutes=max(1, int(fields["weather_refresh_minutes"].get().strip() or "30")),
                     bot_token=fields["bot_token"].get().strip(),
                     allowed_chat_id=fields["allowed_chat_id"].get().strip(),
                     poll_interval_seconds=max(1, int(fields["poll_interval_seconds"].get().strip() or "3")),

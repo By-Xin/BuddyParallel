@@ -19,6 +19,7 @@ from buddy_parallel.runtime.runtime_config import read_runtime_config
 from buddy_parallel.runtime.state import StateStore
 from buddy_parallel.services.telegram_bridge import TelegramBridge
 from buddy_parallel.services.updates import UpdateChecker
+from buddy_parallel.services.weather_bridge import WeatherBridge
 
 
 class BuddyParallelApp:
@@ -29,6 +30,7 @@ class BuddyParallelApp:
         self.state_store = StateStore()
         self.update_checker = UpdateChecker()
         self.telegram_bridge = TelegramBridge(self._load_config, self._post_telegram_message, self.logger, self.state_store)
+        self.weather_bridge = WeatherBridge(self._load_config, self._apply_weather_snapshot, self.logger, self.state_store)
         self._runtime: CompanionRuntime | None = None
         self._current_config: AppConfig | None = None
         self._runtime_lock = threading.RLock()
@@ -70,11 +72,13 @@ class BuddyParallelApp:
         if self.headless:
             print("BuddyParallel companion running in headless mode.")
             self._start_runtime(config)
+            self.weather_bridge.start()
             self.telegram_bridge.start()
             self._run_headless_loop()
             return
 
         self._start_runtime(config)
+        self.weather_bridge.start()
         self.telegram_bridge.start()
         self._watcher = threading.Thread(target=self._watch_config_loop, name="bp-config-watcher", daemon=True)
         self._watcher.start()
@@ -91,6 +95,10 @@ class BuddyParallelApp:
                 "last_device_id": state.last_device_id,
                 "last_status": state.last_status,
                 "last_error": state.last_error,
+                "weather_location_name": state.weather_location_name,
+                "last_weather_error": state.last_weather_error,
+                "last_weather_summary": state.last_weather_summary,
+                "last_weather_update_at": state.last_weather_update_at,
                 "telegram_offset": state.telegram_offset,
                 "last_telegram_error": state.last_telegram_error,
                 "last_telegram_message_summary": state.last_telegram_message_summary,
@@ -103,6 +111,7 @@ class BuddyParallelApp:
 
     def stop(self) -> None:
         self._stopping = True
+        self.weather_bridge.stop()
         self.telegram_bridge.stop()
         self._stop_runtime()
         if self._icon is not None:
@@ -122,6 +131,7 @@ class BuddyParallelApp:
         return self._pystray.Menu(
             self._Item(lambda item: self._status_label(), None, enabled=False),
             self._Item(lambda item: self._detail_label(), None, enabled=False),
+            self._Item(lambda item: self._weather_label(), None, enabled=False),
             self._Item(lambda item: self._telegram_label(), None, enabled=False),
             self._Item("Open Settings", self._open_settings),
             self._Item("Install Hooks", self._install_hooks),
@@ -153,6 +163,16 @@ class BuddyParallelApp:
         prefix = "Telegram OK" if status.telegram_ok else "Telegram idle"
         detail = status.last_error or status.last_message_summary
         return f"{prefix} | {detail[:48]}"
+
+    def _weather_label(self) -> str:
+        config = self.config_store.load()
+        if not config.weather_enabled:
+            return "Weather off"
+        status = self.weather_bridge.status()
+        prefix = "Weather OK" if status.weather_ok else "Weather idle"
+        location = f"{status.location_name} | " if status.location_name else ""
+        detail = status.last_error or status.last_summary
+        return f"{prefix} | {location}{detail[:44]}"
 
     def _open_settings(self, icon=None, item=None) -> None:
         if self._settings_process and self._settings_process.poll() is None:
@@ -223,10 +243,12 @@ class BuddyParallelApp:
             self.logger.info("Config changed; restarting runtime")
             self._stop_runtime()
             self._start_runtime(new_config)
+            self.weather_bridge.request_reload()
             self.telegram_bridge.request_reload()
             self._notify("BuddyParallel runtime configuration reloaded.")
             return
         self.logger.info("Config changed; updating non-runtime services only")
+        self.weather_bridge.request_reload()
         self.telegram_bridge.request_reload()
         self._notify("BuddyParallel settings updated.")
 
@@ -288,6 +310,15 @@ class BuddyParallelApp:
             notice_body=notice_body,
             notice_stamp=notice_stamp,
         )
+        if self._icon is not None:
+            self._icon.update_menu()
+
+    def _apply_weather_snapshot(self, payload: dict | None) -> None:
+        with self._runtime_lock:
+            runtime = self._runtime
+        if runtime is None:
+            return
+        runtime.set_weather_snapshot(payload)
         if self._icon is not None:
             self._icon.update_menu()
 

@@ -26,6 +26,9 @@ struct TamaState {
   uint8_t  noticeIndex;
   uint8_t  noticeTotal;
   uint16_t noticeGen;
+  char     weatherSummary[24];
+  char     weatherLocation[40];
+  uint8_t  weatherCode;
 };
 
 // ---------------------------------------------------------------------------
@@ -173,6 +176,20 @@ static void _applyJson(const char* line, TamaState* out) {
       out->noticeTotal = 0;
     }
   }
+  if (root.containsKey("weather")) {
+    JsonObject wt = root["weather"].as<JsonObject>();
+    if (!wt.isNull()) {
+      const char* summary = wt["board_summary"];
+      const char* location = wt["location"];
+      strncpy(out->weatherSummary, summary ? summary : "", sizeof(out->weatherSummary) - 1); out->weatherSummary[sizeof(out->weatherSummary)-1]=0;
+      strncpy(out->weatherLocation, location ? location : "", sizeof(out->weatherLocation) - 1); out->weatherLocation[sizeof(out->weatherLocation)-1]=0;
+      out->weatherCode = wt["weather_code"] | 0;
+    } else {
+      out->weatherSummary[0] = 0;
+      out->weatherLocation[0] = 0;
+      out->weatherCode = 0;
+    }
+  }
   out->lastUpdated = millis();
   _lastLiveMs = millis();
 }
@@ -231,5 +248,8 @@ inline void dataPoll(TamaState* out) {
     out->recentlyCompleted=false; out->lastUpdated=now;
     strncpy(out->msg, "No Claude connected", sizeof(out->msg)-1);
     out->msg[sizeof(out->msg)-1]=0;
+    out->weatherSummary[0] = 0;
+    out->weatherLocation[0] = 0;
+    out->weatherCode = 0;
   }
 }

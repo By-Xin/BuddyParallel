@@ -14,6 +14,15 @@ class RuntimeState:
     last_device_id: str = ""
     last_status: str = "bootstrap"
     last_error: str = ""
+    weather_query: str = ""
+    weather_location_name: str = ""
+    weather_latitude: float | None = None
+    weather_longitude: float | None = None
+    weather_timezone: str = ""
+    last_weather_error: str = ""
+    last_weather_summary: str = "idle"
+    last_weather_update_at: float = 0.0
+    last_weather_payload: dict | None = None
     telegram_offset: int | None = None
     last_telegram_error: str = ""
     last_telegram_message_summary: str = "idle"

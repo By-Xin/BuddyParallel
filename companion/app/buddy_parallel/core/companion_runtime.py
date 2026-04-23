@@ -34,6 +34,9 @@ class CompanionRuntime:
         self.logger = configure_logging()
         self.state_store = state_store or StateStore()
         self.aggregator = StateAggregator()
+        initial_state = self.state_store.load()
+        if config.weather_enabled and isinstance(initial_state.last_weather_payload, dict):
+            self.aggregator.set_weather(initial_state.last_weather_payload)
         self.permission_bridge = PermissionBridge(self.aggregator)
         self._stop = threading.Event()
         self._threads = RuntimeThreads()
@@ -135,6 +138,10 @@ class CompanionRuntime:
             notice_body=notice_body,
             notice_stamp=notice_stamp,
         )
+        self._publish_heartbeat()
+
+    def set_weather_snapshot(self, payload: dict | None) -> None:
+        self.aggregator.set_weather(payload)
         self._publish_heartbeat()
 
     def _serial_loop(self) -> None:

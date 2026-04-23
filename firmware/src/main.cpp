@@ -712,22 +712,27 @@ static void drawNoticeCard() {
   spr.print("[B] Read next");
 }
 
+static uint16_t weatherAccent(uint8_t code, const Palette& p);
+
 static void drawClockCard() {
   if (!dataRtcValid()) return;
 
   const Palette& p = characterPalette();
+  const bool hasWeather = tama.weatherSummary[0] != 0;
   const int FOOTER_H = 3 * 8 + 4;
-  const int CARD_H = 44;
+  const int CARD_H = hasWeather ? 54 : 44;
   const int CARD_X = 16;
   const int CARD_W = W - CARD_X * 2;
   const int CARD_Y = H - FOOTER_H - CARD_H - 8;
   const int CENTER_X = CARD_X + CARD_W / 2;
-  const int TIME_Y = CARD_Y + 15;
-  const int META_Y = CARD_Y + 35;
+  const int TIME_Y = CARD_Y + (hasWeather ? 13 : 15);
+  const int META_Y = CARD_Y + (hasWeather ? 31 : 35);
+  const int WEATHER_Y = CARD_Y + 44;
 
   char hm[6]; snprintf(hm, sizeof(hm), "%02u:%02u", _clkTm.Hours, _clkTm.Minutes);
   uint8_t mi = (_clkDt.Month >= 1 && _clkDt.Month <= 12) ? _clkDt.Month - 1 : 0;
-  char meta[24]; snprintf(meta, sizeof(meta), "%s %02u  %s", MON[mi], _clkDt.Date, DOW[clockDow()]);
+  char meta[24]; snprintf(meta, sizeof(meta), "%s %02u / %s", MON[mi], _clkDt.Date, DOW[clockDow()]);
+  uint16_t accent = weatherAccent(tama.weatherCode, p);
 
   spr.fillRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 6, p.bg);
   spr.setTextDatum(MC_DATUM);
@@ -737,6 +742,10 @@ static void drawClockCard() {
   spr.setTextSize(1);
   spr.setTextColor(p.textDim, p.bg);
   spr.drawString(meta, CENTER_X, META_Y);
+  if (hasWeather) {
+    spr.setTextColor(accent, p.bg);
+    spr.drawString(tama.weatherSummary, CENTER_X, WEATHER_Y);
+  }
   spr.setTextDatum(TL_DATUM);
 }
 
@@ -751,6 +760,15 @@ static void tinyHeart(int x, int y, bool filled, uint16_t col) {
     spr.drawLine(x - 4, y + 1, x, y + 5, col);
     spr.drawLine(x + 4, y + 1, x, y + 5, col);
   }
+}
+
+static uint16_t weatherAccent(uint8_t code, const Palette& p) {
+  if (code == 0) return 0xFD20;
+  if (code >= 95) return 0xB81F;
+  if (code == 45 || code == 48) return p.textDim;
+  if (code >= 71 && code <= 86) return 0xB7FF;
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 0x5D9B;
+  return p.body;
 }
 
 static void drawPetStats(const Palette& p) {
