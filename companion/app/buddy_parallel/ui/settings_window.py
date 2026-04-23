@@ -81,7 +81,7 @@ class SettingsWindow:
             justify="left",
         ).grid(row=len(labels) + 1, column=1, sticky="w", pady=(8, 4))
 
-        ttk.Checkbutton(frame, text="Launch at startup (reserved)", variable=auto_start).grid(
+        ttk.Checkbutton(frame, text="Launch at startup", variable=auto_start).grid(
             row=len(labels) + 2, column=1, sticky="w", pady=(4, 12)
         )
 

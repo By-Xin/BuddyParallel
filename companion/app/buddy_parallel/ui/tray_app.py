@@ -17,6 +17,7 @@ from buddy_parallel.runtime.config import APP_DIR, CONFIG_PATH, LOG_PATH, AppCon
 from buddy_parallel.runtime.logging_utils import configure_logging
 from buddy_parallel.runtime.runtime_config import read_runtime_config
 from buddy_parallel.runtime.state import StateStore
+from buddy_parallel.services.startup import StartupManager
 from buddy_parallel.services.telegram_bridge import TelegramBridge
 from buddy_parallel.services.updates import UpdateChecker
 from buddy_parallel.services.weather_bridge import WeatherBridge
@@ -29,6 +30,7 @@ class BuddyParallelApp:
         self.config_store = ConfigStore()
         self.state_store = StateStore()
         self.update_checker = UpdateChecker()
+        self.startup_manager = StartupManager()
         self.telegram_bridge = TelegramBridge(self._load_config, self._post_telegram_message, self.logger, self.state_store)
         self.weather_bridge = WeatherBridge(self._load_config, self._apply_weather_snapshot, self.logger, self.state_store)
         self._runtime: CompanionRuntime | None = None
@@ -68,6 +70,7 @@ class BuddyParallelApp:
         APP_DIR.mkdir(parents=True, exist_ok=True)
         self._config_mtime = self._get_config_mtime()
         self._current_config = config
+        self._sync_startup(config)
 
         if self.headless:
             print("BuddyParallel companion running in headless mode.")
@@ -239,6 +242,8 @@ class BuddyParallelApp:
         new_config = self.config_store.load()
         old_config = self._current_config
         self._current_config = new_config
+        auto_start_changed = old_config is not None and old_config.auto_start != new_config.auto_start
+        self._sync_startup(new_config, notify=auto_start_changed)
         if old_config is None or self._requires_runtime_restart(old_config, new_config):
             self.logger.info("Config changed; restarting runtime")
             self._stop_runtime()
@@ -321,6 +326,31 @@ class BuddyParallelApp:
         runtime.set_weather_snapshot(payload)
         if self._icon is not None:
             self._icon.update_menu()
+
+    def _sync_startup(self, config: AppConfig, notify: bool = False) -> None:
+        try:
+            target, arguments, working_dir = self._startup_command()
+            self.startup_manager.apply(
+                enabled=config.auto_start,
+                target=target,
+                arguments=arguments,
+                working_dir=working_dir,
+            )
+            if notify:
+                state = "enabled" if config.auto_start else "disabled"
+                self._notify(f"Launch at startup {state}.")
+        except Exception as exc:
+            self.logger.error("Failed to sync startup entry: %s", exc)
+            if notify:
+                self._notify(f"Launch at startup update failed: {exc}")
+
+    def _startup_command(self) -> tuple[Path, list[str], Path]:
+        if getattr(sys, "frozen", False):
+            return Path(sys.executable).resolve(), [], Path(sys.executable).resolve().parent
+        companion_dir = Path(__file__).resolve().parents[3]
+        repo_root = companion_dir.parent
+        script = companion_dir / "scripts" / "run_companion.py"
+        return script, ["run"], repo_root
 
     @staticmethod
     def _open_path(path: Path) -> None:
