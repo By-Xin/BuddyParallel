@@ -66,13 +66,86 @@ static uint32_t _xWipeAllChars() {
 // it was a transfer command (caller should skip state-update parsing).
 // Needs characterClose()/characterInit() declared before this include.
 void characterClose();
+void characterInvalidate();
 bool characterInit(const char* name);
+void buddyInvalidate();
+void buddySetSpeciesIdx(uint8_t idx);
+uint8_t buddySpeciesIdx();
+uint8_t buddySpeciesCount();
+const char* buddySpeciesName();
 void petNameSet(const char* name);
 const char* petName();
 void ownerSet(const char* name);
 const char* ownerName();
+void applyBrightness();
+void setBrightnessLevel(uint8_t level, bool persist);
 #include "stats.h"
 #include <M5StickCPlus.h>
+
+static bool _xParseBool(JsonVariantConst v, bool* out) {
+  if (v.is<bool>()) {
+    *out = v.as<bool>();
+    return true;
+  }
+  if (v.is<int>()) {
+    *out = v.as<int>() != 0;
+    return true;
+  }
+  if (v.is<unsigned int>()) {
+    *out = v.as<unsigned int>() != 0;
+    return true;
+  }
+  return false;
+}
+
+static bool _xReadBoolField(JsonDocument& doc, const char* field, bool* out) {
+  return _xParseBool(doc[field], out) || _xParseBool(doc["value"], out);
+}
+
+static bool _xParseBrightness(JsonVariantConst v, uint8_t* out) {
+  if (v.is<int>()) {
+    int level = v.as<int>();
+    if (level < 0) level = 0;
+    *out = settingsClampBrightness((uint8_t)level);
+    return true;
+  }
+  if (v.is<unsigned int>()) {
+    *out = settingsClampBrightness((uint8_t)v.as<unsigned int>());
+    return true;
+  }
+  return false;
+}
+
+static bool _xReadBrightnessLevel(JsonDocument& doc, uint8_t* out) {
+  return _xParseBrightness(doc["level"], out)
+      || _xParseBrightness(doc["brightness"], out)
+      || _xParseBrightness(doc["value"], out);
+}
+
+static void _xCurrentGifName(char* out, size_t outLen) {
+  out[0] = 0;
+  File root = LittleFS.open("/characters");
+  if (!root || !root.isDirectory()) {
+    _safeCopy(out, outLen, "gif");
+    return;
+  }
+  File entry = root.openNextFile();
+  while (entry) {
+    if (entry.isDirectory()) {
+      const char* full = entry.name();
+      const char* slash = strrchr(full, '/');
+      _safeCopy(out, outLen, slash ? slash + 1 : full);
+      entry.close();
+      root.close();
+      if (!out[0]) _safeCopy(out, outLen, "gif");
+      return;
+    }
+    entry.close();
+    entry = root.openNextFile();
+  }
+  root.close();
+  _safeCopy(out, outLen, "gif");
+}
 
 inline bool xferCommand(JsonDocument& doc) {
   const char* cmd = doc["cmd"];
@@ -87,12 +160,55 @@ inline bool xferCommand(JsonDocument& doc) {
 
   if (strcmp(cmd, "species") == 0) {
     extern bool buddyMode, gifAvailable;
-    extern void buddySetSpeciesIdx(uint8_t);
     uint8_t idx = doc["idx"] | 0xFF;
-    speciesIdxSave(idx);
-    buddyMode = !(gifAvailable && idx == 0xFF);
-    if (buddyMode) buddySetSpeciesIdx(idx);
-    _xAck("species", true);
+    bool ok = false;
+    if (idx == 0xFF) {
+      if (gifAvailable) {
+        speciesIdxSave(0xFF);
+        buddyMode = false;
+        ok = true;
+      }
+    } else if (idx < buddySpeciesCount()) {
+      buddyMode = true;
+      buddySetSpeciesIdx(idx);
+      speciesIdxSave(idx);
+      ok = true;
+    }
+    if (ok) {
+      characterInvalidate();
+      if (buddyMode) buddyInvalidate();
+    }
+    _xAck("species", ok, ok ? idx : 0);
+    return true;
+  }
+
+  if (strcmp(cmd, "brightness") == 0) {
+    uint8_t level = settings().brightness;
+    bool ok = _xReadBrightnessLevel(doc, &level);
+    if (ok) setBrightnessLevel(level, true);
+    _xAck("brightness", ok, ok ? settings().brightness : 0);
+    return true;
+  }
+
+  if (strcmp(cmd, "sound") == 0) {
+    bool on = false;
+    bool ok = _xReadBoolField(doc, "on", &on);
+    if (ok) {
+      settings().sound = on;
+      settingsSave();
+    }
+    _xAck("sound", ok, ok ? (on ? 1 : 0) : 0);
+    return true;
+  }
+
+  if (strcmp(cmd, "led") == 0) {
+    bool on = false;
+    bool ok = _xReadBoolField(doc, "on", &on);
+    if (ok) {
+      settings().led = on;
+      settingsSave();
+    }
+    _xAck("led", ok, ok ? (on ? 1 : 0) : 0);
     return true;
   }
 
@@ -117,15 +233,27 @@ inline bool xferCommand(JsonDocument& doc) {
     int vBus = (int)(M5.Axp.GetVBusVoltage() * 1000);
     int pct = (vBat - 3200) / 10;
     if (pct < 0) pct = 0; if (pct > 100) pct = 100;
-    char b[320];
+    extern bool buddyMode, gifAvailable;
+    const char* petMode = buddyMode ? "ascii" : "gif";
+    uint8_t petIndex = buddyMode ? buddySpeciesIdx() : 0xFF;
+    char petNameBuf[32];
+    if (buddyMode) _safeCopy(petNameBuf, sizeof(petNameBuf), buddySpeciesName());
+    else _xCurrentGifName(petNameBuf, sizeof(petNameBuf));
+    char b[512];
     int len = snprintf(b, sizeof(b),
       "{\"ack\":\"status\",\"ok\":true,\"n\":0,\"data\":{"
       "\"name\":\"%s\",\"owner\":\"%s\",\"sec\":%s,"
+      "\"settings\":{\"brightness\":%u,\"sound\":%s,\"led\":%s},"
+      "\"pet\":{\"mode\":\"%s\",\"index\":%u,\"name\":\"%s\",\"gif_available\":%s},"
       "\"bat\":{\"pct\":%d,\"mV\":%d,\"mA\":%d,\"usb\":%s},"
       "\"sys\":{\"up\":%lu,\"heap\":%u,\"fsFree\":%lu,\"fsTotal\":%lu},"
       "\"stats\":{\"appr\":%u,\"deny\":%u,\"vel\":%u,\"nap\":%lu,\"lvl\":%u}"
       "}}\n",
       petName(), ownerName(), bleSecure() ? "true" : "false",
+      settings().brightness,
+      settings().sound ? "true" : "false",
+      settings().led ? "true" : "false",
+      petMode, petIndex, petNameBuf, gifAvailable ? "true" : "false",
       pct, vBat, iBat, (vBus > 4000) ? "true" : "false",
       millis() / 1000, ESP.getFreeHeap(),
       (unsigned long)(LittleFS.totalBytes() - LittleFS.usedBytes()),

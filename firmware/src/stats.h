@@ -177,6 +177,7 @@ inline uint8_t statsFedProgress() {
 // --- Settings --------------------------------------------------------------
 
 struct Settings {
+  uint8_t brightness;  // 0..4
   bool sound;
   bool bt;
   bool wifi;     // placeholder — no WiFi stack linked yet, just stores the pref
@@ -185,10 +186,19 @@ struct Settings {
   uint8_t clockRot;  // 0=auto 1=portrait 2=landscape
 };
 
-static Settings _settings = { true, true, false, true, true, 0 };
+static Settings _settings = { 4, true, true, false, true, true, 0 };
+
+inline uint8_t settingsClampBrightness(uint8_t level) {
+  return level > 4 ? 4 : level;
+}
+
+inline void settingsSetBrightness(uint8_t level) {
+  _settings.brightness = settingsClampBrightness(level);
+}
 
 inline void settingsLoad() {
   _prefs.begin("buddy", true);
+  _settings.brightness = settingsClampBrightness(_prefs.getUChar("s_bri", 4));
   _settings.sound = _prefs.getBool("s_snd", true);
   _settings.bt    = _prefs.getBool("s_bt",  true);
   _settings.wifi  = _prefs.getBool("s_wifi",false);
@@ -201,6 +211,7 @@ inline void settingsLoad() {
 
 inline void settingsSave() {
   _prefs.begin("buddy", false);
+  _prefs.putUChar("s_bri", _settings.brightness);
   _prefs.putBool("s_snd", _settings.sound);
   _prefs.putBool("s_bt",  _settings.bt);
   _prefs.putBool("s_wifi",_settings.wifi);

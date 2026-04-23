@@ -43,7 +43,6 @@ unsigned long t = 0;
 // Menu
 bool    menuOpen    = false;
 uint8_t menuSel     = 0;
-uint8_t brightLevel = 4;           // 0..4 → ScreenBreath 20..100
 bool    btnALong    = false;
 
 enum DisplayMode { DISP_NORMAL, DISP_PET, DISP_INFO, DISP_COUNT };
@@ -97,7 +96,13 @@ static bool isFaceDown() {
   return az < -0.7f && fabsf(ax) < 0.4f && fabsf(ay) < 0.4f;
 }
 
-static void applyBrightness() { M5.Axp.ScreenBreath(20 + brightLevel * 20); }
+void applyBrightness() { M5.Axp.ScreenBreath(20 + settings().brightness * 20); }
+
+void setBrightnessLevel(uint8_t level, bool persist) {
+  settingsSetBrightness(level);
+  if (!dimmed && !screenOff) applyBrightness();
+  if (persist) settingsSave();
+}
 
 static void wake() {
   lastInteractMs = millis();
@@ -162,8 +167,7 @@ static void applySetting(uint8_t idx) {
   Settings& s = settings();
   switch (idx) {
     case 0:
-      brightLevel = (brightLevel + 1) % 5;
-      applyBrightness();
+      setBrightnessLevel((uint8_t)((s.brightness + 1) % 5), true);
       return;
     case 1: s.sound = !s.sound; break;
     case 2:
@@ -274,7 +278,7 @@ static void drawSettings() {
     spr.setCursor(mx + mw - 36, my + 8 + i * 14);
     spr.setTextColor(p.textDim, PANEL);
     if (i == 0) {
-      spr.printf("%u/4", brightLevel);
+      spr.printf("%u/4", s.brightness);
     } else if (i >= 1 && i <= 5) {
       spr.setTextColor(vals[i-1] ? GREEN : p.textDim, PANEL);
       spr.print(vals[i-1] ? " on" : "off");
@@ -521,7 +525,7 @@ void drawInfo() {
     uint32_t up = millis() / 1000;
     ln("  uptime   %luh %02lum", up / 3600, (up / 60) % 60);
     ln("  heap     %uKB", ESP.getFreeHeap() / 1024);
-    ln("  bright   %u/4", brightLevel);
+    ln("  bright   %u/4", settings().brightness);
     ln("  bt       %s", settings().bt ? (dataBtActive() ? "linked" : "on") : "off");
     ln("  temp     %dC", (int)M5.Axp.GetTempInAXP192());
 
@@ -669,6 +673,7 @@ static void drawNoticeCard() {
   const int CARD_H = H - CARD_Y - 8;
   const int CARD_X = 6;
   const int CARD_W = W - CARD_X * 2;
+  spr.fillRect(0, CARD_Y, W, H - CARD_Y, p.bg);
   spr.fillRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 6, PANEL);
   spr.drawRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 6, p.textDim);
 
@@ -713,6 +718,7 @@ static void drawNoticeCard() {
 }
 
 static uint16_t weatherAccent(uint8_t code, const Palette& p);
+static int clockCardTop(bool hasWeather);
 
 static void drawClockCard() {
   if (!dataRtcValid()) return;
@@ -721,9 +727,9 @@ static void drawClockCard() {
   const bool hasWeather = tama.weatherSummary[0] != 0;
   const int FOOTER_H = 3 * 8 + 4;
   const int CARD_H = hasWeather ? 54 : 44;
-  const int CARD_X = 16;
+  const int CARD_X = 10;
   const int CARD_W = W - CARD_X * 2;
-  const int CARD_Y = H - FOOTER_H - CARD_H - 8;
+  const int CARD_Y = clockCardTop(hasWeather);
   const int CENTER_X = CARD_X + CARD_W / 2;
   const int TIME_Y = CARD_Y + (hasWeather ? 13 : 15);
   const int META_Y = CARD_Y + (hasWeather ? 31 : 35);
@@ -747,6 +753,12 @@ static void drawClockCard() {
     spr.drawString(tama.weatherSummary, CENTER_X, WEATHER_Y);
   }
   spr.setTextDatum(TL_DATUM);
+}
+
+static int clockCardTop(bool hasWeather) {
+  const int FOOTER_H = 3 * 8 + 4;
+  const int CARD_H = hasWeather ? 54 : 44;
+  return H - FOOTER_H - CARD_H - 8;
 }
 
 static void tinyHeart(int x, int y, bool filled, uint16_t col) {
@@ -884,9 +896,11 @@ void drawHUD() {
   if (tama.promptId[0]) { drawApproval(); return; }
   if (noticeVisible) { drawNoticeCard(); return; }
   const Palette& p = characterPalette();
-  drawClockCard();
   const int SHOW = 3, LH = 8, WIDTH = 21;
   const int AREA = SHOW * LH + 4;
+  const int clearTop = dataRtcValid() ? clockCardTop(tama.weatherSummary[0] != 0) : (H - 78);
+  spr.fillRect(0, clearTop, W, H - clearTop, p.bg);
+  drawClockCard();
   spr.fillRect(0, H - AREA, W, AREA, p.bg);
   spr.setTextSize(1);
 
@@ -938,11 +952,11 @@ void setup() {
   startBt();
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH);   // off
+  statsLoad();
+  settingsLoad();
   applyBrightness();
   lastInteractMs = millis();
   lastActivityMs = lastInteractMs;
-  statsLoad();
-  settingsLoad();
   petNameLoad();
   buddyInit();
 
