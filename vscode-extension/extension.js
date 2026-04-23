@@ -35,7 +35,6 @@ async function runManualApproval() {
   const allowed = await requestBoardApproval({
     toolName: "VS Code action",
     toolInput: { command: "manual test approval" },
-    pendingMessage: "VS Code: waiting approval",
     completionLabel: "manual approval"
   });
 
@@ -58,7 +57,6 @@ async function runApprovedCommentInsert() {
   const allowed = await requestBoardApproval({
     toolName: "Workspace Edit",
     toolInput: { file_path: document.uri.fsPath },
-    pendingMessage: `VS Code: edit ${basename(document.uri.fsPath)}`,
     completionLabel: "workspace edit"
   });
 
@@ -73,22 +71,11 @@ async function runApprovedCommentInsert() {
   vscode.window.showInformationMessage("BuddyParallel approved and inserted the comment.");
 }
 
-async function requestBoardApproval({ toolName, toolInput, pendingMessage, completionLabel }) {
-  const session = getSessionInfo();
-
-  await sendBuddyEvent({
-    event: "PreToolUse",
-    state: "working",
-    message: pendingMessage,
-    entries: [toolName],
-    running: true,
-    completed: false
-  });
-
+async function requestBoardApproval({ toolName, toolInput, completionLabel }) {
   let decision;
   try {
     const response = await postJson("/vscode/permission", {
-      session_id: session.id,
+      session_id: getSessionInfo().id,
       tool_name: toolName,
       tool_input: toolInput,
       timeout_seconds: getConfiguration().get("requestTimeoutSeconds", 590)
