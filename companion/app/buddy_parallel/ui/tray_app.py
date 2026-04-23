@@ -15,6 +15,7 @@ from buddy_parallel import __version__
 from buddy_parallel.core.companion_runtime import CompanionRuntime
 from buddy_parallel.core.hardware_state import (
     GIF_PET_INDEX,
+    HardwareSnapshot,
     brightness_display,
     parse_hardware_snapshot,
     pet_choices,
@@ -103,7 +104,7 @@ class BuddyParallelApp:
         state = self.state_store.load()
         return {
             "runtime": runtime,
-            "hardware": parse_hardware_snapshot(runtime.get("device_status") if isinstance(runtime, dict) else None).__dict__,
+            "hardware": self._snapshot_from_runtime(runtime).__dict__,
             "state": {
                 "last_transport": state.last_transport,
                 "last_device_id": state.last_device_id,
@@ -199,7 +200,7 @@ class BuddyParallelApp:
 
     def _hardware_label(self) -> str:
         runtime = read_runtime_config()
-        hardware = parse_hardware_snapshot(runtime.get("device_status") if isinstance(runtime, dict) else None)
+        hardware = self._snapshot_from_runtime(runtime)
         port = str(runtime.get("device_port") or "") if isinstance(runtime, dict) else ""
         if not hardware.connected:
             target = port or self.config_store.load().serial_port or "auto"
@@ -212,7 +213,7 @@ class BuddyParallelApp:
 
     def _hardware_controls_label(self) -> str:
         runtime = read_runtime_config()
-        hardware = parse_hardware_snapshot(runtime.get("device_status") if isinstance(runtime, dict) else None)
+        hardware = self._snapshot_from_runtime(runtime)
         brightness = brightness_display(hardware.brightness)
         sound = self._on_off_label(hardware.sound_enabled)
         led = self._on_off_label(hardware.led_enabled)
@@ -249,9 +250,9 @@ class BuddyParallelApp:
             items.append(
                 self._Item(
                     f"{level}/4",
-                    lambda icon, item, level=level: self._set_brightness(level),
+                    self._brightness_action(level),
                     enabled=lambda item: self._device_available(),
-                    checked=lambda item, level=level: self._hardware_snapshot().brightness == level,
+                    checked=self._brightness_checked(level),
                     radio=True,
                 )
             )
@@ -266,9 +267,9 @@ class BuddyParallelApp:
             items.append(
                 self._Item(
                     label,
-                    lambda icon, item, pet_index=pet_index: self._set_pet(pet_index),
+                    self._pet_action(pet_index),
                     enabled=lambda item: self._device_available(),
-                    checked=lambda item, pet_index=pet_index: self._current_pet_index() == pet_index,
+                    checked=self._pet_checked(pet_index),
                     radio=True,
                 )
             )
@@ -295,8 +296,8 @@ class BuddyParallelApp:
             items.append(
                 self._Item(
                     label,
-                    lambda icon, item, port=device.device: self._select_serial_port(port),
-                    checked=lambda item, port=device.device: self.config_store.load().serial_port == port,
+                    self._port_action(device.device),
+                    checked=self._port_checked(device.device),
                     radio=True,
                 )
             )
@@ -321,7 +322,16 @@ class BuddyParallelApp:
 
     def _hardware_snapshot(self):
         runtime = read_runtime_config()
-        status = runtime.get("device_status") if isinstance(runtime, dict) else None
+        return self._snapshot_from_runtime(runtime)
+
+    @staticmethod
+    def _snapshot_from_runtime(runtime: dict | None) -> HardwareSnapshot:
+        if not isinstance(runtime, dict):
+            return HardwareSnapshot()
+        transport = str(runtime.get("transport") or "").strip().lower()
+        if transport in {"", "idle", "mock"}:
+            return HardwareSnapshot()
+        status = runtime.get("device_status")
         return parse_hardware_snapshot(status)
 
     def _device_available(self) -> bool:
@@ -354,6 +364,42 @@ class BuddyParallelApp:
         if config.serial_port == port:
             return
         self._save_config(replace(config, serial_port=port))
+
+    def _brightness_action(self, level: int):
+        def action(icon, item) -> None:
+            self._set_brightness(level)
+
+        return action
+
+    def _brightness_checked(self, level: int):
+        def checked(item) -> bool:
+            return self._hardware_snapshot().brightness == level
+
+        return checked
+
+    def _pet_action(self, pet_index: int):
+        def action(icon, item) -> None:
+            self._set_pet(pet_index)
+
+        return action
+
+    def _pet_checked(self, pet_index: int):
+        def checked(item) -> bool:
+            return self._current_pet_index() == pet_index
+
+        return checked
+
+    def _port_action(self, port: str):
+        def action(icon, item) -> None:
+            self._select_serial_port(port)
+
+        return action
+
+    def _port_checked(self, port: str):
+        def checked(item) -> bool:
+            return self.config_store.load().serial_port == port
+
+        return checked
 
     def _save_config(self, config: AppConfig) -> None:
         self.config_store.save(config)
