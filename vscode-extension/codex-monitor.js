@@ -27,6 +27,9 @@ function buildCodexEntries(sample) {
   if (sample.focused) {
     entries.push("focused in editor");
   }
+  if (!sample.windowFocused) {
+    entries.push("window in background");
+  }
   if (sample.primaryLabel) {
     entries.push(sample.primaryLabel);
   }
@@ -49,15 +52,16 @@ function buildCodexPresencePayload(sample, session) {
     };
   }
 
+  const activelyFocused = Boolean(sample.focused && sample.windowFocused);
   return {
     session_id: sessionId,
     session_title: sessionTitle,
-    event: "SessionStart",
-    state: "idle",
-    running: false,
+    event: activelyFocused ? "PreToolUse" : "SessionStart",
+    state: activelyFocused ? "working" : "idle",
+    running: activelyFocused,
     waiting: false,
     completed: false,
-    message: sample.focused ? `${sessionTitle}: task focused` : `${sessionTitle}: task open`,
+    message: activelyFocused ? `${sessionTitle}: task active` : sample.focused ? `${sessionTitle}: task focused` : `${sessionTitle}: task open`,
     entries: buildCodexEntries(sample),
   };
 }
@@ -74,6 +78,9 @@ function describeCodexStatus(sample, errorText = "") {
   }
   if (!sample.hasTask) {
     return "Codex active, no open task.";
+  }
+  if (sample.focused && sample.windowFocused) {
+    return `Codex active in editor, ${formatTaskCount(sample.taskCount)}.`;
   }
   return sample.focused
     ? `Codex focused, ${formatTaskCount(sample.taskCount)}.`

@@ -77,6 +77,9 @@ function activate(context) {
     vscode.window.onDidChangeActiveTextEditor(() => {
       queueCodexSync(state, "active-editor");
     }),
+    vscode.window.onDidChangeWindowState(() => {
+      queueCodexSync(state, "window-focus");
+    }),
     vscode.window.tabGroups.onDidChangeTabs(() => {
       queueCodexSync(state, "tabs");
     }),
@@ -396,6 +399,7 @@ function collectCodexSample() {
     taskCount: allUris.length,
     hasTask: allUris.length > 0,
     focused: Boolean(activeUri),
+    windowFocused: Boolean(vscode.window.state?.focused),
     primaryLabel: activeUri ? basename(activeUri.path || activeUri.toString()) : "",
   };
 }
@@ -471,6 +475,7 @@ function emptyCodexSample() {
     taskCount: 0,
     hasTask: false,
     focused: false,
+    windowFocused: Boolean(vscode.window.state?.focused),
     primaryLabel: "",
   };
 }
@@ -514,6 +519,7 @@ function renderStatusMarkdown(state) {
     `- Codex extension active: ${sample.active ? "yes" : "no"}`,
     `- Open Codex tasks: ${sample.taskCount}`,
     `- Focused Codex task: ${sample.focused ? (sample.primaryLabel || "yes") : "no"}`,
+    `- VS Code window focused: ${sample.windowFocused ? "yes" : "no"}`,
     `- Monitor summary: ${describeCodexStatus(sample, state.lastCodexError)}`,
   ];
   if (state.lastCodexPayloadKey) {
