@@ -12,9 +12,12 @@
     "Other"
   ],
   "activationEvents": [
+    "onStartupFinished",
     "onCommand:buddyParallel.requestBoardApproval",
     "onCommand:buddyParallel.insertApprovedComment",
-    "onCommand:buddyParallel.sendTestNotice"
+    "onCommand:buddyParallel.sendTestNotice",
+    "onCommand:buddyParallel.openCodexSidebar",
+    "onCommand:buddyParallel.newCodexTask"
   ],
   "main": "./extension.js",
   "contributes": {
@@ -32,6 +35,16 @@
       {
         "command": "buddyParallel.sendTestNotice",
         "title": "BuddyParallel: Send Test Notice",
+        "category": "BuddyParallel"
+      },
+      {
+        "command": "buddyParallel.openCodexSidebar",
+        "title": "BuddyParallel: Open Codex Sidebar",
+        "category": "BuddyParallel"
+      },
+      {
+        "command": "buddyParallel.newCodexTask",
+        "title": "BuddyParallel: New Codex Task",
         "category": "BuddyParallel"
       }
     ],
@@ -53,6 +66,22 @@
           "default": 590,
           "minimum": 1,
           "description": "How long the extension waits for a hardware approval decision."
+        },
+        "buddyParallel.codexMonitoringEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mirror stable Codex presence signals from VS Code to BuddyParallel."
+        },
+        "buddyParallel.codexPollingIntervalSeconds": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "description": "How often BuddyParallel samples Codex task presence."
+        },
+        "buddyParallel.codexSessionTitle": {
+          "type": "string",
+          "default": "Codex",
+          "description": "Session title sent to BuddyParallel for Codex presence updates."
         }
       }
     }

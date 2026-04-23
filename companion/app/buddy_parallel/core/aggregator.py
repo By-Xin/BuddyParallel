@@ -37,6 +37,11 @@ class StateAggregator:
 
     def apply_event(self, payload: dict) -> None:
         session_id = payload.get("session_id") or "default"
+        if payload.get("clear_session"):
+            self.sessions.pop(session_id, None)
+            if self.pending_prompt and self.pending_prompt.session_id == session_id:
+                self.pending_prompt = None
+            return
         state = payload.get("state") or "idle"
         session = self.sessions.get(session_id) or SessionSnapshot(session_id=session_id)
         session.state = state

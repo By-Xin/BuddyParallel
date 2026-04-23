@@ -62,6 +62,28 @@ class AggregatorTests(unittest.TestCase):
         aggregator.set_weather({"location": "Singapore", "summary": "29C Rain", "board_summary": "29C Rain"})
         self.assertEqual(aggregator.build_heartbeat()["weather"]["board_summary"], "29C Rain")
 
+    def test_clear_session_removes_idle_session(self) -> None:
+        aggregator = StateAggregator()
+        aggregator.apply_event(
+            {
+                "session_id": "vscode-demo",
+                "state": "idle",
+                "message": "Codex open",
+            }
+        )
+        self.assertEqual(aggregator.build_heartbeat()["total"], 1)
+
+        aggregator.apply_event(
+            {
+                "session_id": "vscode-demo",
+                "clear_session": True,
+            }
+        )
+
+        heartbeat = aggregator.build_heartbeat()
+        self.assertEqual(heartbeat["total"], 0)
+        self.assertEqual(heartbeat["msg"], "No Claude connected")
+
 
 if __name__ == "__main__":
     unittest.main()

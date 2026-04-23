@@ -38,6 +38,7 @@ def normalize_event(payload: dict[str, Any]) -> dict[str, Any]:
         "running": bool(payload.get("running", state in {"thinking", "working", "busy"})),
         "waiting": bool(payload.get("waiting", state == "attention")),
         "completed": bool(payload.get("completed", event == "Notification")),
+        "clear_session": bool(payload.get("clear_session", False)),
     }
     if isinstance(payload.get("entries"), list):
         normalized["entries"] = [str(item) for item in payload["entries"][:8]]
