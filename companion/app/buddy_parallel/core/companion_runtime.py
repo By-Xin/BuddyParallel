@@ -79,6 +79,11 @@ class CompanionRuntime:
     def on_permission_request(self, handler, payload: dict) -> None:
         entry = self.permission_bridge.register(payload)
         self._publish_heartbeat()
+        self.logger.info(
+            "permission prompt published request_id=%s transport=%s",
+            entry.request_id,
+            self.device_manager.active_name or "none",
+        )
         self.logger.info("permission pending request_id=%s tool=%s", entry.request_id, payload.get("tool_name", "Unknown"))
         decision = self.permission_bridge.wait_for_decision(entry.request_id)
         self._publish_heartbeat()
@@ -95,6 +100,11 @@ class CompanionRuntime:
         }
         entry = self.permission_bridge.register(request_payload)
         self._publish_heartbeat()
+        self.logger.info(
+            "vscode permission prompt published request_id=%s transport=%s",
+            entry.request_id,
+            self.device_manager.active_name or "none",
+        )
         self.logger.info("vscode permission pending request_id=%s tool=%s", entry.request_id, request_payload["tool_name"])
         decision = self.permission_bridge.wait_for_decision(entry.request_id, timeout=float(payload.get("timeout_seconds") or 590.0))
         self._publish_heartbeat()
@@ -277,10 +287,11 @@ class CompanionRuntime:
             self.device_manager.active_name = self._serial.name
             self._serial_bootstrapped = True
             self.logger.info("serial transport connected on %s", self._serial.port)
-            status = self._serial.request_status()
-            if status:
-                self._last_device_status = status
-                self.logger.info("device status received on %s", self._serial.port)
+            # Kick off a status refresh, but do not block the caller here.
+            # Permission prompts and other heartbeats should reach the board
+            # immediately after bootstrap instead of waiting through a full
+            # synchronous status round-trip.
+            self._serial.send_json({"cmd": "status"})
             return True
 
     def _reset_serial_session(self) -> None:
