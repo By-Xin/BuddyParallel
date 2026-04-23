@@ -2,6 +2,7 @@
 
 const CODEX_EXTENSION_ID = "openai.chatgpt";
 const CODEX_URI_SCHEME = "openai-codex";
+const ACTIVE_UPDATE_WINDOW_MS = 12000;
 
 function slugifyWorkspaceName(value) {
   return String(value || "window")
@@ -24,6 +25,9 @@ function formatTaskCount(count) {
 
 function buildCodexEntries(sample) {
   const entries = [formatTaskCount(sample.taskCount)];
+  if (sample.recentlyUpdated) {
+    entries.push("recent update");
+  }
   if (sample.focused) {
     entries.push("focused in editor");
   }
@@ -52,16 +56,21 @@ function buildCodexPresencePayload(sample, session) {
     };
   }
 
-  const activelyFocused = Boolean(sample.focused && sample.windowFocused);
+  const activelyUpdating = Boolean(sample.recentlyUpdated);
+  const foregroundFocused = Boolean(sample.focused && sample.windowFocused);
   return {
     session_id: sessionId,
     session_title: sessionTitle,
-    event: activelyFocused ? "PreToolUse" : "SessionStart",
-    state: activelyFocused ? "working" : "idle",
-    running: activelyFocused,
+    event: activelyUpdating ? "PreToolUse" : "SessionStart",
+    state: activelyUpdating ? "working" : "idle",
+    running: activelyUpdating,
     waiting: false,
     completed: false,
-    message: activelyFocused ? `${sessionTitle}: task active` : sample.focused ? `${sessionTitle}: task focused` : `${sessionTitle}: task open`,
+    message: activelyUpdating
+      ? `${sessionTitle}: task updating`
+      : foregroundFocused
+        ? `${sessionTitle}: task focused`
+        : `${sessionTitle}: task open`,
     entries: buildCodexEntries(sample),
   };
 }
@@ -79,8 +88,11 @@ function describeCodexStatus(sample, errorText = "") {
   if (!sample.hasTask) {
     return "Codex active, no open task.";
   }
+  if (sample.recentlyUpdated) {
+    return `Codex updating, ${formatTaskCount(sample.taskCount)}.`;
+  }
   if (sample.focused && sample.windowFocused) {
-    return `Codex active in editor, ${formatTaskCount(sample.taskCount)}.`;
+    return `Codex focused, ${formatTaskCount(sample.taskCount)}.`;
   }
   return sample.focused
     ? `Codex focused, ${formatTaskCount(sample.taskCount)}.`
@@ -91,7 +103,15 @@ function buildCodexPayloadKey(payload) {
   return JSON.stringify(payload);
 }
 
+function isRecentCodexUpdate(lastUpdatedAt, now = Date.now()) {
+  if (!Number.isFinite(lastUpdatedAt) || lastUpdatedAt <= 0) {
+    return false;
+  }
+  return (now - lastUpdatedAt) <= ACTIVE_UPDATE_WINDOW_MS;
+}
+
 module.exports = {
+  ACTIVE_UPDATE_WINDOW_MS,
   CODEX_EXTENSION_ID,
   CODEX_URI_SCHEME,
   buildBaseSessionId,
@@ -101,5 +121,6 @@ module.exports = {
   buildCodexPresencePayload,
   describeCodexStatus,
   formatTaskCount,
+  isRecentCodexUpdate,
   slugifyWorkspaceName,
 };

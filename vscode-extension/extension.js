@@ -9,6 +9,7 @@ const {
   buildCodexPayloadKey,
   buildCodexPresencePayload,
   describeCodexStatus,
+  isRecentCodexUpdate,
 } = require("./codex-monitor");
 
 function activate(context) {
@@ -22,6 +23,7 @@ function activate(context) {
     codexResyncRequested: false,
     lastCodexPayloadKey: "",
     lastCodexError: "",
+    lastCodexUpdateAt: 0,
     lastCodexSample: emptyCodexSample(),
   };
 
@@ -70,6 +72,12 @@ function activate(context) {
     }),
     vscode.workspace.onDidCloseTextDocument(() => {
       queueCodexSync(state, "close-doc");
+    }),
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      if (event.document?.uri?.scheme === CODEX_URI_SCHEME) {
+        state.lastCodexUpdateAt = Date.now();
+        queueCodexSync(state, "doc-update");
+      }
     }),
     vscode.window.onDidChangeVisibleTextEditors(() => {
       queueCodexSync(state, "visible-editors");
@@ -344,7 +352,7 @@ async function syncCodexPresence(state) {
   state.codexSyncInFlight = true;
 
   try {
-    const sample = collectCodexSample();
+    const sample = collectCodexSample(state);
     state.lastCodexSample = sample;
     const payload = buildCodexPresencePayload(sample, getSessionInfo());
     const payloadKey = buildCodexPayloadKey(payload);
@@ -370,7 +378,7 @@ async function syncCodexPresence(state) {
 }
 
 async function clearCodexPresence(state) {
-  const payload = buildCodexPresencePayload(emptyCodexSample(), getSessionInfo());
+  const payload = buildCodexPresencePayload(emptyCodexSample(state), getSessionInfo());
   const payloadKey = buildCodexPayloadKey(payload);
   try {
     if (payloadKey !== state.lastCodexPayloadKey) {
@@ -382,11 +390,11 @@ async function clearCodexPresence(state) {
     state.lastCodexError = String(error.message || error);
     logOutput(state, `Failed to clear Codex session: ${state.lastCodexError}`);
   }
-  state.lastCodexSample = emptyCodexSample();
+  state.lastCodexSample = emptyCodexSample(state);
   updateStatusItem(state);
 }
 
-function collectCodexSample() {
+function collectCodexSample(state) {
   const extension = vscode.extensions.getExtension(CODEX_EXTENSION_ID);
   const documents = vscode.workspace.textDocuments.filter((document) => document.uri.scheme === CODEX_URI_SCHEME);
   const tabUris = collectCodexTabUris();
@@ -399,6 +407,7 @@ function collectCodexSample() {
     taskCount: allUris.length,
     hasTask: allUris.length > 0,
     focused: Boolean(activeUri),
+    recentlyUpdated: isRecentCodexUpdate(state.lastCodexUpdateAt),
     windowFocused: Boolean(vscode.window.state?.focused),
     primaryLabel: activeUri ? basename(activeUri.path || activeUri.toString()) : "",
   };
@@ -468,13 +477,14 @@ function dedupeUris(uris) {
   return ordered;
 }
 
-function emptyCodexSample() {
+function emptyCodexSample(state = null) {
   return {
     installed: Boolean(vscode.extensions.getExtension(CODEX_EXTENSION_ID)),
     active: Boolean(vscode.extensions.getExtension(CODEX_EXTENSION_ID)?.isActive),
     taskCount: 0,
     hasTask: false,
     focused: false,
+    recentlyUpdated: Boolean(state && isRecentCodexUpdate(state.lastCodexUpdateAt)),
     windowFocused: Boolean(vscode.window.state?.focused),
     primaryLabel: "",
   };
@@ -488,7 +498,7 @@ function updateStatusItem(state) {
     return;
   }
 
-  const sample = state.lastCodexSample || emptyCodexSample();
+  const sample = state.lastCodexSample || emptyCodexSample(state);
   const codexBadge = sample.hasTask ? ` Codex ${sample.taskCount}` : "";
   const prefix = state.lastCodexError ? "$(warning)" : "$(device-camera-video)";
   state.statusItem.text = `${prefix} BuddyParallel${codexBadge}`;
@@ -507,7 +517,7 @@ function showCodexMonitorStatus(state) {
 }
 
 function renderStatusMarkdown(state) {
-  const sample = state.lastCodexSample || emptyCodexSample();
+  const sample = state.lastCodexSample || emptyCodexSample(state);
   const session = getSessionInfo();
   const lines = [
     `**BuddyParallel**`,
@@ -519,6 +529,7 @@ function renderStatusMarkdown(state) {
     `- Codex extension active: ${sample.active ? "yes" : "no"}`,
     `- Open Codex tasks: ${sample.taskCount}`,
     `- Focused Codex task: ${sample.focused ? (sample.primaryLabel || "yes") : "no"}`,
+    `- Recent Codex document update: ${sample.recentlyUpdated ? "yes" : "no"}`,
     `- VS Code window focused: ${sample.windowFocused ? "yes" : "no"}`,
     `- Monitor summary: ${describeCodexStatus(sample, state.lastCodexError)}`,
   ];
