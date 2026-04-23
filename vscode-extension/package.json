@@ -1,0 +1,60 @@
+{
+  "name": "buddyparallel-vscode",
+  "displayName": "BuddyParallel for VS Code",
+  "description": "Local VS Code approval bridge for BuddyParallel hardware prompts.",
+  "version": "0.0.1",
+  "publisher": "by-xin",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:buddyParallel.requestBoardApproval",
+    "onCommand:buddyParallel.insertApprovedComment",
+    "onCommand:buddyParallel.sendTestNotice"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "buddyParallel.requestBoardApproval",
+        "title": "BuddyParallel: Request Board Approval",
+        "category": "BuddyParallel"
+      },
+      {
+        "command": "buddyParallel.insertApprovedComment",
+        "title": "BuddyParallel: Insert Approved Comment",
+        "category": "BuddyParallel"
+      },
+      {
+        "command": "buddyParallel.sendTestNotice",
+        "title": "BuddyParallel: Send Test Notice",
+        "category": "BuddyParallel"
+      }
+    ],
+    "configuration": {
+      "title": "BuddyParallel",
+      "properties": {
+        "buddyParallel.apiBaseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:43112",
+          "description": "Local BuddyParallel companion API base URL."
+        },
+        "buddyParallel.sessionTitle": {
+          "type": "string",
+          "default": "VS Code",
+          "description": "Session title sent to the BuddyParallel companion."
+        },
+        "buddyParallel.requestTimeoutSeconds": {
+          "type": "number",
+          "default": 590,
+          "minimum": 1,
+          "description": "How long the extension waits for a hardware approval decision."
+        }
+      }
+    }
+  }
+}

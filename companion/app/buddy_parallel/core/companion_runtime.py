@@ -4,6 +4,7 @@ import json
 import threading
 from dataclasses import dataclass
 from time import sleep
+from uuid import uuid4
 
 from buddy_parallel.core.aggregator import StateAggregator
 from buddy_parallel.core.device_manager import DeviceManager
@@ -41,6 +42,7 @@ class CompanionRuntime:
         self._stop = threading.Event()
         self._threads = RuntimeThreads()
         self._serial_session_lock = threading.Lock()
+        self._device_io_lock = threading.RLock()
         self._serial_bootstrapped = False
         self._last_device_status: dict | None = None
         self._mock = MockTransport()
@@ -53,7 +55,12 @@ class CompanionRuntime:
             transports.append(self._ble)
         self.device_manager = DeviceManager(transports=transports)
         self.hook_server = HookServer("127.0.0.1", config.hook_server_port, self.on_state_event, self.on_permission_request)
-        self.api_server = ApiServer("127.0.0.1", config.api_server_port, self.on_api_event)
+        self.api_server = ApiServer(
+            "127.0.0.1",
+            config.api_server_port,
+            self.on_api_event,
+            self.on_vscode_permission_request,
+        )
 
     def on_state_event(self, payload: dict) -> None:
         normalized = normalize_event(payload)
@@ -78,6 +85,27 @@ class CompanionRuntime:
         self.logger.info("permission resolved request_id=%s decision=%s", entry.request_id, decision)
         self.permission_bridge.send_hook_response(handler, decision)
 
+    def on_vscode_permission_request(self, payload: dict) -> dict:
+        session_id = str(payload.get("session_id") or "vscode")
+        request_payload = {
+            "request_id": str(payload.get("request_id") or f"vscode-{uuid4().hex[:10]}"),
+            "session_id": session_id,
+            "tool_name": str(payload.get("tool_name") or "VS Code action"),
+            "tool_input": payload.get("tool_input") or {},
+        }
+        entry = self.permission_bridge.register(request_payload)
+        self._publish_heartbeat()
+        self.logger.info("vscode permission pending request_id=%s tool=%s", entry.request_id, request_payload["tool_name"])
+        decision = self.permission_bridge.wait_for_decision(entry.request_id, timeout=float(payload.get("timeout_seconds") or 590.0))
+        self._publish_heartbeat()
+        self.logger.info("vscode permission resolved request_id=%s decision=%s", entry.request_id, decision)
+        return {
+            "ok": True,
+            "request_id": entry.request_id,
+            "decision": decision,
+            "allowed": decision == "allow",
+        }
+
     def start(self) -> None:
         self.hook_server.start()
         self.api_server.start()
@@ -97,6 +125,7 @@ class CompanionRuntime:
         self.hook_server.shutdown()
         self.api_server.shutdown()
         self._reset_serial_session()
+        self._ble.close()
         self._write_runtime_snapshot("stopped")
 
     def run_forever(self) -> None:
@@ -114,10 +143,37 @@ class CompanionRuntime:
         return {
             "heartbeat": heartbeat,
             "transport": transport_name,
+            "device_port": self._serial.port,
             "serial": serial_summary(self.config.serial_port),
             "ble": ble_summary(self.config.ble_device_name),
             "device_status": self._last_device_status,
         }
+
+    def latest_device_status(self) -> dict | None:
+        return self._last_device_status
+
+    def refresh_device_status(self) -> dict | None:
+        with self._device_io_lock:
+            transport = self._control_transport()
+            if transport is None:
+                return None
+            status = transport.request_status()
+            if status is not None:
+                self._last_device_status = status
+                self._write_runtime_snapshot("running")
+            return status
+
+    def apply_device_command(self, payload: dict, refresh: bool = True) -> dict | None:
+        with self._device_io_lock:
+            transport = self._control_transport()
+            if transport is None:
+                raise RuntimeError("device transport is unavailable")
+            transport.send_json(payload)
+            status = transport.request_status() if refresh else self._last_device_status
+            if status is not None:
+                self._last_device_status = status
+            self._write_runtime_snapshot("running")
+            return status
 
     def post_transient_message(
         self,
@@ -150,11 +206,17 @@ class CompanionRuntime:
                 self._stop.wait(1.0)
                 continue
             try:
-                if not self._ensure_serial_session():
-                    self.device_manager.active_name = ""
+                ready = False
+                line = ""
+                with self._device_io_lock:
+                    ready = self._ensure_serial_session()
+                    if ready:
+                        line = self._serial.read_line(timeout=0.25)
+                    else:
+                        self.device_manager.active_name = ""
+                if not ready:
                     self._stop.wait(1.0)
                     continue
-                line = self._serial.read_line(timeout=0.25)
                 if line:
                     self._handle_device_line(line)
             except Exception as exc:
@@ -175,16 +237,27 @@ class CompanionRuntime:
 
         if self.config.transport_mode in {"auto", "serial"}:
             try:
-                if self._ensure_serial_session():
-                    self._serial.send_json(heartbeat)
-                    self.device_manager.active_name = self._serial.name
-                    return
+                with self._device_io_lock:
+                    if self._ensure_serial_session():
+                        self._serial.send_json(heartbeat)
+                        self.device_manager.active_name = self._serial.name
+                        return
             except Exception as exc:
                 self.logger.warning("serial heartbeat failed: %s", exc)
                 self._reset_serial_session()
 
         self._mock.send_json(heartbeat)
         self.device_manager.active_name = self._mock.name
+
+    def _control_transport(self):
+        if self.config.transport_mode in {"auto", "serial"} and self._ensure_serial_session():
+            self.device_manager.active_name = self._serial.name
+            return self._serial
+        if self.config.transport_mode in {"auto", "ble"} and self._ble.open():
+            self._ble.send_handshake(owner_name=self.config.owner_name, device_name=self.config.device_name)
+            self.device_manager.active_name = self._ble.name
+            return self._ble
+        return None
 
     def _ensure_serial_session(self) -> bool:
         if self.config.transport_mode not in {"auto", "serial"}:
@@ -246,6 +319,7 @@ class CompanionRuntime:
 
         if payload.get("ack") == "status":
             self._last_device_status = payload
+            self._write_runtime_snapshot("running")
             return
 
         if isinstance(payload.get("ack"), str):
@@ -270,6 +344,7 @@ class CompanionRuntime:
                 "hook_server_port": self.config.hook_server_port,
                 "api_server_port": self.config.api_server_port,
                 "transport": active,
+                "device_port": self._serial.port,
                 "heartbeat": heartbeat,
                 "device_status": self._last_device_status,
             }
