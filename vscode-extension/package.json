@@ -13,11 +13,14 @@
   ],
   "activationEvents": [
     "onStartupFinished",
+    "onChatParticipant:buddyparallel.chat",
     "onCommand:buddyParallel.requestBoardApproval",
     "onCommand:buddyParallel.insertApprovedComment",
     "onCommand:buddyParallel.sendTestNotice",
     "onCommand:buddyParallel.openCodexSidebar",
-    "onCommand:buddyParallel.newCodexTask"
+    "onCommand:buddyParallel.newCodexTask",
+    "onCommand:buddyParallel.showCodexMonitorStatus",
+    "onCommand:buddyParallel.showLogs"
   ],
   "main": "./extension.js",
   "contributes": {
@@ -46,6 +49,39 @@
         "command": "buddyParallel.newCodexTask",
         "title": "BuddyParallel: New Codex Task",
         "category": "BuddyParallel"
+      },
+      {
+        "command": "buddyParallel.showCodexMonitorStatus",
+        "title": "BuddyParallel: Show Codex Monitor Status",
+        "category": "BuddyParallel"
+      },
+      {
+        "command": "buddyParallel.showLogs",
+        "title": "BuddyParallel: Show Logs",
+        "category": "BuddyParallel"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "buddyparallel.chat",
+        "name": "buddy",
+        "fullName": "BuddyParallel",
+        "description": "Hardware approval bridge and Codex monitor for VS Code",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "status",
+            "description": "Show BuddyParallel and Codex monitor status"
+          },
+          {
+            "name": "codex",
+            "description": "Show Codex bridge actions"
+          },
+          {
+            "name": "board",
+            "description": "Run a BuddyParallel board approval test"
+          }
+        ]
       }
     ],
     "configuration": {
