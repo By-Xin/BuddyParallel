@@ -24,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--api-port", type=int, default=0)
     parser.add_argument("--port", default="")
+    parser.add_argument("--board", default="auto")
     parser.add_argument("--firmware-dir", default="")
     parser.add_argument("--erase", action="store_true")
     return parser
@@ -60,6 +61,7 @@ def main() -> None:
             result = flash_board(
                 port=args.port,
                 firmware_root=args.firmware_dir or None,
+                board_id=args.board,
                 erase_first=bool(args.erase),
                 progress=progress,
             )

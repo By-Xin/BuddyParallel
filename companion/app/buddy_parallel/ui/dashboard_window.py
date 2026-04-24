@@ -81,6 +81,7 @@ def build_dashboard_model(config: AppConfig, runtime: dict | None, state: Runtim
 
     setup_lines = (
         f"Transport preference: {config.transport_mode}",
+        f"Board profile: {config.board_profile}",
         f"Notice source: {config.notice_transport}",
         f"Weather sync: {'on' if config.weather_enabled else 'off'}",
         f"Launch at startup: {'on' if config.auto_start else 'off'}",
@@ -276,6 +277,7 @@ class DashboardWindow:
         config = self._config_store.load()
         fields = {
             "transport_mode": tk.StringVar(master=parent, value=config.transport_mode),
+            "board_profile": tk.StringVar(master=parent, value=config.board_profile),
             "serial_port": tk.StringVar(master=parent, value=config.serial_port),
             "serial_baud": tk.StringVar(master=parent, value=str(config.serial_baud)),
             "notice_transport": tk.StringVar(master=parent, value=config.notice_transport),
@@ -306,11 +308,22 @@ class DashboardWindow:
         self._settings_row(
             transport,
             0,
+            "Board Type",
+            ttk.Combobox(
+                transport,
+                textvariable=fields["board_profile"],
+                values=["auto", "m5stickc-plus", "m5stack-cores3"],
+                state="readonly",
+            ),
+        )
+        self._settings_row(
+            transport,
+            1,
             "Mode",
             ttk.Combobox(transport, textvariable=fields["transport_mode"], values=["auto", "serial", "ble", "mock"], state="readonly"),
         )
-        self._settings_row(transport, 1, "Serial Port", ttk.Entry(transport, textvariable=fields["serial_port"]))
-        self._settings_row(transport, 2, "Serial Baud", ttk.Entry(transport, textvariable=fields["serial_baud"]))
+        self._settings_row(transport, 2, "Serial Port", ttk.Entry(transport, textvariable=fields["serial_port"]))
+        self._settings_row(transport, 3, "Serial Baud", ttk.Entry(transport, textvariable=fields["serial_baud"]))
 
         services = self._settings_group(parent, 2, "Services")
         self._settings_row(
@@ -368,6 +381,7 @@ class DashboardWindow:
             updated = replace(
                 current,
                 transport_mode=fields["transport_mode"].get().strip() or "auto",
+                board_profile=fields["board_profile"].get().strip() or "auto",
                 serial_port=fields["serial_port"].get().strip(),
                 serial_baud=int(fields["serial_baud"].get().strip() or "115200"),
                 notice_transport=fields["notice_transport"].get().strip() or "off",

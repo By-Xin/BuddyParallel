@@ -25,11 +25,17 @@ $distDir = Join-Path $repoRoot "dist"
 $buildDir = Join-Path $repoRoot "build\pyinstaller"
 $venvPython = Join-Path $companionRoot ".venv-build\Scripts\python.exe"
 $firmwareBuildDir = Join-Path $repoRoot "firmware\.pio\build\m5stickc-plus"
+$coreS3FirmwareBuildDir = Join-Path $repoRoot "firmware\.pio\build\m5stack-cores3"
 $firmwareFiles = @(
     (Join-Path $firmwareBuildDir "bootloader.bin"),
     (Join-Path $firmwareBuildDir "partitions.bin"),
     (Join-Path $firmwareBuildDir "firmware.bin"),
     (Join-Path $repoRoot "firmware\.platformio_local\packages\framework-arduinoespressif32\tools\partitions\boot_app0.bin")
+)
+$coreS3FirmwareFiles = @(
+    (Join-Path $coreS3FirmwareBuildDir "bootloader.bin"),
+    (Join-Path $coreS3FirmwareBuildDir "partitions.bin"),
+    (Join-Path $coreS3FirmwareBuildDir "firmware.bin")
 )
 
 if ($Clean) {
@@ -58,6 +64,10 @@ if (-not $SkipFirmwareCheck) {
     $missingFirmware = @($firmwareFiles | Where-Object { -not (Test-Path $_) })
     if ($missingFirmware.Count -gt 0) {
         throw "Firmware artifacts are missing. Build firmware first or pass -SkipFirmwareCheck for app-only builds: $($missingFirmware -join ', ')"
+    }
+    $missingCoreS3Firmware = @($coreS3FirmwareFiles | Where-Object { -not (Test-Path $_) })
+    if ($missingCoreS3Firmware.Count -gt 0) {
+        Write-Warning "CoreS3 firmware artifacts are missing and will not be packaged until you build env:m5stack-cores3: $($missingCoreS3Firmware -join ', ')"
     }
 }
 

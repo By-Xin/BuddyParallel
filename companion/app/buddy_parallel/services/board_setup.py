@@ -17,6 +17,59 @@ from buddy_parallel.transports.serial_transport import SerialDeviceInfo, SerialT
 DEFAULT_FLASH_BAUD = 115200
 DEFAULT_SERIAL_BAUD = 115200
 FIRMWARE_ENV_VAR = "BUDDY_PARALLEL_FIRMWARE_DIR"
+DEFAULT_BOARD_ID = "m5stickc-plus"
+AUTO_BOARD_ID = "auto"
+
+
+@dataclass(frozen=True)
+class BoardProfile:
+    id: str
+    display_name: str
+    pio_env: str
+    firmware_subdir: str
+    chip: str
+    aliases: tuple[str, ...]
+    bootloader_address: int = 0x1000
+    partitions_address: int = 0x8000
+    boot_app0_address: int | None = 0xE000
+    firmware_address: int = 0x10000
+    flash_mode: str = "dio"
+    flash_freq: str = "40m"
+    usb_vid_pid: tuple[tuple[int, int], ...] = ()
+    detection_tokens: tuple[str, ...] = ()
+
+    @property
+    def label(self) -> str:
+        return self.display_name
+
+
+BOARD_PROFILES: tuple[BoardProfile, ...] = (
+    BoardProfile(
+        id="m5stickc-plus",
+        display_name="M5StickC Plus",
+        pio_env="m5stickc-plus",
+        firmware_subdir="m5stickc-plus",
+        chip="esp32",
+        aliases=("m5stickc-plus", "m5stick", "m5stick-c", "stick", "stickc", "stickc-plus"),
+        bootloader_address=0x1000,
+        flash_mode="dio",
+        flash_freq="40m",
+        detection_tokens=("cp210", "ch340", "m5stick", "stickc"),
+    ),
+    BoardProfile(
+        id="m5stack-cores3",
+        display_name="M5Stack CoreS3",
+        pio_env="m5stack-cores3",
+        firmware_subdir="m5stack-cores3",
+        chip="esp32s3",
+        aliases=("m5stack-cores3", "m5stack-s3", "m5stacks3", "cores3", "core-s3", "s3"),
+        bootloader_address=0x0,
+        flash_mode="dio",
+        flash_freq="80m",
+        usb_vid_pid=((0x303A, 0x8119),),
+        detection_tokens=("cores3", "core s3", "usb jtag/serial", "usb jtag", "esp32-s3", "esp32s3"),
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -34,6 +87,7 @@ class FirmwareImage:
 class FirmwareBundle:
     root: Path
     images: tuple[FirmwareImage, ...]
+    profile: BoardProfile
 
     @property
     def available(self) -> bool:
@@ -55,6 +109,10 @@ class BoardCandidate:
     port: str
     description: str = ""
     manufacturer: str = ""
+    hwid: str = ""
+    vid: int | None = None
+    pid: int | None = None
+    inferred_board_id: str = ""
     status: dict | None = None
     error: str = ""
 
@@ -74,6 +132,7 @@ class FlashResult:
     port: str
     message: str
     bundle_root: Path | None = None
+    board_id: str = ""
     status: dict | None = None
 
 
@@ -89,7 +148,72 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[4]
 
 
-def default_firmware_roots() -> list[Path]:
+def supported_board_profiles() -> tuple[BoardProfile, ...]:
+    return BOARD_PROFILES
+
+
+def normalize_board_id(board_id: str = AUTO_BOARD_ID) -> str:
+    text = str(board_id or AUTO_BOARD_ID).strip().lower()
+    if text in {"", AUTO_BOARD_ID}:
+        return AUTO_BOARD_ID
+    for profile in BOARD_PROFILES:
+        if text == profile.id or text in profile.aliases:
+            return profile.id
+    raise ValueError(f"Unsupported board type: {board_id}")
+
+
+def get_board_profile(board_id: str = DEFAULT_BOARD_ID) -> BoardProfile:
+    normalized = normalize_board_id(board_id)
+    if normalized == AUTO_BOARD_ID:
+        normalized = DEFAULT_BOARD_ID
+    for profile in BOARD_PROFILES:
+        if profile.id == normalized:
+            return profile
+    raise ValueError(f"Unsupported board type: {board_id}")
+
+
+def board_label(board_id: str) -> str:
+    return get_board_profile(board_id).display_name
+
+
+def infer_board_profile(device: SerialDeviceInfo | BoardCandidate | None) -> BoardProfile | None:
+    if device is None:
+        return None
+    vid = getattr(device, "vid", None)
+    pid = getattr(device, "pid", None)
+    if vid is not None and pid is not None:
+        for profile in BOARD_PROFILES:
+            if (int(vid), int(pid)) in profile.usb_vid_pid:
+                return profile
+    haystack = " ".join(
+        str(getattr(device, key, "") or "")
+        for key in ("description", "manufacturer", "hwid", "serial_number")
+    ).lower()
+    for profile in BOARD_PROFILES:
+        if any(token in haystack for token in profile.detection_tokens):
+            return profile
+    return None
+
+
+def choose_board_profile(board_id: str = AUTO_BOARD_ID, port: str = "", candidates: list[BoardCandidate] | None = None) -> BoardProfile:
+    normalized = normalize_board_id(board_id)
+    if normalized != AUTO_BOARD_ID:
+        return get_board_profile(normalized)
+    candidates = candidates if candidates is not None else list_board_candidates(probe_status=False)
+    if port:
+        selected = next((candidate for candidate in candidates if candidate.port == port), None)
+        inferred = infer_board_profile(selected)
+        if inferred is not None:
+            return inferred
+    for candidate in candidates:
+        inferred = infer_board_profile(candidate)
+        if inferred is not None:
+            return inferred
+    return get_board_profile(DEFAULT_BOARD_ID)
+
+
+def default_firmware_roots(board_id: str = DEFAULT_BOARD_ID) -> list[Path]:
+    profile = get_board_profile(board_id)
     roots: list[Path] = []
     override = os.environ.get(FIRMWARE_ENV_VAR, "").strip()
     if override:
@@ -97,32 +221,37 @@ def default_firmware_roots() -> list[Path]:
 
     if getattr(sys, "frozen", False):
         internal_root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+        roots.append(internal_root / "firmware" / profile.firmware_subdir)
         roots.append(internal_root / "firmware")
+        roots.append(Path(sys.executable).resolve().parent / "firmware" / profile.firmware_subdir)
         roots.append(Path(sys.executable).resolve().parent / "firmware")
 
     root = repo_root()
     roots.extend(
         [
+            root / "dist" / "BuddyParallel" / "firmware" / profile.firmware_subdir,
             root / "dist" / "BuddyParallel" / "firmware",
+            root / "companion" / "app" / "buddy_parallel" / "assets" / "firmware" / profile.firmware_subdir,
             root / "companion" / "app" / "buddy_parallel" / "assets" / "firmware",
-            root / "firmware" / ".pio" / "build" / "m5stickc-plus",
+            root / "firmware" / ".pio" / "build" / profile.pio_env,
         ]
     )
     return _dedupe_paths(roots)
 
 
-def find_firmware_bundle(root: Path | str | None = None) -> FirmwareBundle:
+def find_firmware_bundle(root: Path | str | None = None, board_id: str = DEFAULT_BOARD_ID) -> FirmwareBundle:
+    profile = get_board_profile(board_id)
     if root is not None:
-        return _bundle_from_root(Path(root).expanduser())
+        return _bundle_from_root(Path(root).expanduser(), profile)
 
-    candidates = default_firmware_roots()
+    candidates = default_firmware_roots(profile.id)
     for candidate in candidates:
-        bundle = _bundle_from_root(candidate)
+        bundle = _bundle_from_root(candidate, profile)
         if bundle.available:
             return bundle
     if candidates:
-        return _bundle_from_root(candidates[0])
-    return _bundle_from_root(Path("firmware"))
+        return _bundle_from_root(candidates[0], profile)
+    return _bundle_from_root(Path("firmware"), profile)
 
 
 def list_board_candidates(baud: int = DEFAULT_SERIAL_BAUD, probe_status: bool = True) -> list[BoardCandidate]:
@@ -130,6 +259,7 @@ def list_board_candidates(baud: int = DEFAULT_SERIAL_BAUD, probe_status: bool = 
     for device in discover_serial_devices():
         status: dict | None = None
         error = ""
+        inferred = infer_board_profile(device)
         if probe_status:
             try:
                 status = request_board_status(device.device, baud=baud)
@@ -140,6 +270,10 @@ def list_board_candidates(baud: int = DEFAULT_SERIAL_BAUD, probe_status: bool = 
                 port=device.device,
                 description=device.description,
                 manufacturer=device.manufacturer,
+                hwid=device.hwid,
+                vid=device.vid,
+                pid=device.pid,
+                inferred_board_id=inferred.id if inferred is not None else "",
                 status=status,
                 error=error,
             )
@@ -147,7 +281,7 @@ def list_board_candidates(baud: int = DEFAULT_SERIAL_BAUD, probe_status: bool = 
     return candidates
 
 
-def choose_board_port(preferred_port: str = "", baud: int = DEFAULT_SERIAL_BAUD) -> str:
+def choose_board_port(preferred_port: str = "", baud: int = DEFAULT_SERIAL_BAUD, board_id: str = AUTO_BOARD_ID) -> str:
     preferred_port = preferred_port.strip()
     if preferred_port:
         return preferred_port
@@ -157,10 +291,12 @@ def choose_board_port(preferred_port: str = "", baud: int = DEFAULT_SERIAL_BAUD)
     if buddy is not None:
         return buddy.port
 
-    devices = [
-        SerialDeviceInfo(candidate.port, candidate.description, candidate.manufacturer)
-        for candidate in candidates
-    ]
+    profile = choose_board_profile(board_id, candidates=candidates)
+    profile_match = next((candidate for candidate in candidates if candidate.inferred_board_id == profile.id), None)
+    if profile_match is not None:
+        return profile_match.port
+
+    devices = [_serial_info_from_candidate(candidate) for candidate in candidates]
     preferred = _preferred_serial_device(devices)
     return preferred.device if preferred is not None else ""
 
@@ -187,9 +323,10 @@ def wait_for_board_status(port: str, baud: int = DEFAULT_SERIAL_BAUD, timeout_se
 
 
 def build_write_flash_args(port: str, bundle: FirmwareBundle, flash_baud: int = DEFAULT_FLASH_BAUD) -> list[str]:
+    profile = bundle.profile
     return [
         "--chip",
-        "esp32",
+        profile.chip,
         "--port",
         port,
         "--baud",
@@ -201,19 +338,20 @@ def build_write_flash_args(port: str, bundle: FirmwareBundle, flash_baud: int = 
         "write_flash",
         "-z",
         "--flash_mode",
-        "dio",
+        profile.flash_mode,
         "--flash_freq",
-        "40m",
+        profile.flash_freq,
         "--flash_size",
         "detect",
         *bundle.esptool_segments(),
     ]
 
 
-def build_erase_flash_args(port: str, flash_baud: int = DEFAULT_FLASH_BAUD) -> list[str]:
+def build_erase_flash_args(port: str, flash_baud: int = DEFAULT_FLASH_BAUD, board_id: str = DEFAULT_BOARD_ID) -> list[str]:
+    profile = get_board_profile(board_id)
     return [
         "--chip",
-        "esp32",
+        profile.chip,
         "--port",
         port,
         "--baud",
@@ -230,27 +368,30 @@ def flash_board(
     port: str = "",
     firmware_root: Path | str | None = None,
     *,
+    board_id: str = AUTO_BOARD_ID,
     erase_first: bool = False,
     flash_baud: int = DEFAULT_FLASH_BAUD,
     serial_baud: int = DEFAULT_SERIAL_BAUD,
     progress: ProgressCallback | None = None,
     runner: EsptoolRunner | None = None,
 ) -> FlashResult:
-    bundle = find_firmware_bundle(firmware_root)
+    candidates = list_board_candidates(baud=serial_baud, probe_status=False)
+    profile = choose_board_profile(board_id, port=port.strip(), candidates=candidates)
+    bundle = find_firmware_bundle(firmware_root, board_id=profile.id)
     if not bundle.available:
         missing = ", ".join(str(path) for path in bundle.missing_files)
-        return FlashResult(False, port, f"Firmware bundle is incomplete: {missing}", bundle.root)
+        return FlashResult(False, port, f"{profile.display_name} firmware bundle is incomplete: {missing}", bundle.root, profile.id)
 
-    selected_port = choose_board_port(port, baud=serial_baud)
+    selected_port = choose_board_port(port, baud=serial_baud, board_id=profile.id)
     if not selected_port:
-        return FlashResult(False, "", "No serial board was found.", bundle.root)
+        return FlashResult(False, "", f"No serial board was found for {profile.display_name}.", bundle.root, profile.id)
 
     runner = runner or run_esptool
     if erase_first:
-        _emit(progress, "Erasing board flash...")
-        _check_esptool_exit(runner(build_erase_flash_args(selected_port, flash_baud), progress))
+        _emit(progress, f"Erasing {profile.display_name} flash...")
+        _check_esptool_exit(runner(build_erase_flash_args(selected_port, flash_baud, profile.id), progress))
 
-    _emit(progress, f"Flashing BuddyParallel firmware on {selected_port}...")
+    _emit(progress, f"Flashing BuddyParallel firmware for {profile.display_name} on {selected_port}...")
     _check_esptool_exit(runner(build_write_flash_args(selected_port, bundle, flash_baud), progress))
     _emit(progress, "Waiting for the board to reboot...")
     status = wait_for_board_status(selected_port, baud=serial_baud)
@@ -258,17 +399,19 @@ def flash_board(
         return FlashResult(
             False,
             selected_port,
-            "Firmware was written, but BuddyParallel did not answer after reboot.",
+            f"{profile.display_name} firmware was written, but BuddyParallel did not answer after reboot.",
             bundle.root,
+            profile.id,
             status,
         )
-    return FlashResult(True, selected_port, "BuddyParallel firmware is ready.", bundle.root, status)
+    return FlashResult(True, selected_port, f"BuddyParallel firmware is ready on {profile.display_name}.", bundle.root, profile.id, status)
 
 
-def save_board_port(port: str, config_store: ConfigStore | None = None) -> AppConfig:
+def save_board_port(port: str, config_store: ConfigStore | None = None, board_id: str = AUTO_BOARD_ID) -> AppConfig:
     store = config_store or ConfigStore()
     config = store.load()
-    updated = replace(config, transport_mode="auto", serial_port=port.strip(), serial_baud=DEFAULT_SERIAL_BAUD)
+    profile_id = normalize_board_id(board_id)
+    updated = replace(config, transport_mode="auto", serial_port=port.strip(), serial_baud=DEFAULT_SERIAL_BAUD, board_profile=profile_id)
     store.save(updated)
     return updated
 
@@ -293,20 +436,32 @@ def _check_esptool_exit(exit_code: int) -> None:
         raise FirmwareFlashError(f"esptool failed with exit code {exit_code}.")
 
 
-def _bundle_from_root(root: Path) -> FirmwareBundle:
+def _bundle_from_root(root: Path, profile: BoardProfile) -> FirmwareBundle:
     boot_app0 = root / "boot_app0.bin"
-    if not boot_app0.exists():
+    if profile.boot_app0_address is not None and not boot_app0.exists():
         local_boot_app0 = repo_root() / "firmware" / ".platformio_local" / "packages" / "framework-arduinoespressif32" / "tools" / "partitions" / "boot_app0.bin"
         if local_boot_app0.exists():
             boot_app0 = local_boot_app0
 
-    images = (
-        FirmwareImage("bootloader", 0x1000, root / "bootloader.bin"),
-        FirmwareImage("partitions", 0x8000, root / "partitions.bin"),
-        FirmwareImage("boot_app0", 0xE000, boot_app0),
-        FirmwareImage("firmware", 0x10000, root / "firmware.bin"),
+    images = [
+        FirmwareImage("bootloader", profile.bootloader_address, root / "bootloader.bin"),
+        FirmwareImage("partitions", profile.partitions_address, root / "partitions.bin"),
+    ]
+    if profile.boot_app0_address is not None:
+        images.append(FirmwareImage("boot_app0", profile.boot_app0_address, boot_app0))
+    images.append(FirmwareImage("firmware", profile.firmware_address, root / "firmware.bin"))
+    return FirmwareBundle(root=root, images=tuple(images), profile=profile)
+
+
+def _serial_info_from_candidate(candidate: BoardCandidate) -> SerialDeviceInfo:
+    return SerialDeviceInfo(
+        candidate.port,
+        candidate.description,
+        candidate.manufacturer,
+        candidate.hwid,
+        candidate.vid,
+        candidate.pid,
     )
-    return FirmwareBundle(root=root, images=images)
 
 
 def _preferred_serial_device(devices: list[SerialDeviceInfo]) -> SerialDeviceInfo | None:
