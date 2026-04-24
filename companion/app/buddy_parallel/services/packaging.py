@@ -4,7 +4,7 @@ from textwrap import dedent
 
 from buddy_parallel import __version__
 from buddy_parallel.runtime.config import APP_DIR, CONFIG_PATH, LOG_PATH, RUNTIME_PATH
-from buddy_parallel.services.launching import is_frozen
+from buddy_parallel.services.launching import companion_root, is_frozen, repo_root
 
 
 def build_notes() -> str:
@@ -47,5 +47,12 @@ def build_notes() -> str:
         - verify serial transport on the primary USB board path
         - verify the chosen notice transport end-to-end on a clean machine
         - verify logs do not expose secrets and config migration still works
+
+        Build commands
+        --------------
+        - source diagnostics: `buddy-parallel packaging-notes`
+        - Windows build script: `powershell -ExecutionPolicy Bypass -File companion\\scripts\\build_windows.ps1`
+        - PyInstaller spec: `{companion_root() / "packaging" / "buddy_parallel.spec"}`
+        - default output dir: `{repo_root() / "dist"}`
         """
     ).strip()

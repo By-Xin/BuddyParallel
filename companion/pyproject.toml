@@ -22,6 +22,7 @@ buddy-parallel-settings = "buddy_parallel.ui.settings_window:main"
 buddy-parallel-dashboard = "buddy_parallel.ui.dashboard_window:main"
 
 [project.optional-dependencies]
+build = ["pyinstaller>=6.10,<7"]
 tray = ["pystray>=0.19", "pillow>=10.0"]
 serial = ["pyserial>=3.5"]
 ble = ["bleak>=0.22"]

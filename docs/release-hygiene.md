@@ -19,6 +19,13 @@ Turn the current developer-friendly BuddyParallel checkout into a Windows build 
 - make startup integration point to the packaged app, not a repo checkout
 - avoid requiring users to install Python dependencies manually
 
+## Current build skeleton
+
+- PyInstaller spec: `companion/packaging/buddy_parallel.spec`
+- build script: `companion/scripts/build_windows.ps1`
+- shared launch helper: `companion/app/buddy_parallel/services/launching.py`
+- packaging notes: `buddy-parallel packaging-notes`
+
 ## Immediate checklist
 
 - verify packaged tray launch
