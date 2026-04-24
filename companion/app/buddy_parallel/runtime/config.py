@@ -1,16 +1,25 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
 
-APP_DIR = Path.home() / "AppData" / "Roaming" / "BuddyParallel"
+def _default_app_dir() -> Path:
+    override = os.environ.get("BUDDY_PARALLEL_APP_DIR", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / "AppData" / "Roaming" / "BuddyParallel"
+
+
+APP_DIR = _default_app_dir()
 CONFIG_PATH = APP_DIR / "config.json"
 LOG_PATH = APP_DIR / "buddy-parallel.log"
 STATE_PATH = APP_DIR / "state.json"
 RUNTIME_PATH = APP_DIR / "runtime.json"
+LOCK_PATH = APP_DIR / "buddy-parallel.lock"
 DEFAULT_UPDATE_MANIFEST_URL = ""
 
 

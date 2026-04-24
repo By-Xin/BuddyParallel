@@ -3,7 +3,7 @@ from __future__ import annotations
 from textwrap import dedent
 
 from buddy_parallel import __version__
-from buddy_parallel.runtime.config import APP_DIR, CONFIG_PATH, LOG_PATH, RUNTIME_PATH
+from buddy_parallel.runtime.config import APP_DIR, CONFIG_PATH, LOCK_PATH, LOG_PATH, RUNTIME_PATH
 from buddy_parallel.services.launching import companion_root, is_frozen, repo_root
 
 
@@ -31,6 +31,7 @@ def build_notes() -> str:
         - config: {CONFIG_PATH}
         - state/runtime logs: {LOG_PATH}
         - runtime snapshot: {RUNTIME_PATH}
+        - single-instance lock: {LOCK_PATH}
 
         Packaging expectations
         ----------------------
@@ -39,9 +40,11 @@ def build_notes() -> str:
         - preserve the companion app dir contract under `%APPDATA%\\BuddyParallel`
         - keep tray, settings, dashboard, and helper launches on the same executable family
         - include optional tray extras plus any enabled notice bridge dependencies
+        - use `BUDDY_PARALLEL_APP_DIR` only for isolated package smoke tests
 
         Release checklist
         -----------------
+        - verify a second tray/headless launch exits cleanly instead of competing for COM ports
         - verify tray launch, dashboard launch, and settings launch from the packaged build
         - verify startup shortcut creation points to the packaged app, not a repo script
         - verify serial transport on the primary USB board path
@@ -54,6 +57,6 @@ def build_notes() -> str:
         - prepare build venv: `powershell -ExecutionPolicy Bypass -File companion\\scripts\\prepare_build_env.ps1`
         - Windows build script: `powershell -ExecutionPolicy Bypass -File companion\\scripts\\build_windows.ps1`
         - PyInstaller spec: `{companion_root() / "packaging" / "buddy_parallel.spec"}`
-        - default output dir: `{repo_root() / "dist"}`
+        - default output app: `{repo_root() / "dist" / "BuddyParallel" / "BuddyParallel.exe"}`
         """
     ).strip()

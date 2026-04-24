@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 import webbrowser
+import ctypes
 from dataclasses import replace
 from pathlib import Path
 
@@ -22,11 +23,12 @@ from buddy_parallel.core.hardware_state import (
     pet_display_name,
 )
 from buddy_parallel.ingest.install_hooks import main as install_hooks_main
-from buddy_parallel.runtime.config import APP_DIR, CONFIG_PATH, LOG_PATH, AppConfig, ConfigStore
+from buddy_parallel.runtime.config import APP_DIR, CONFIG_PATH, LOCK_PATH, LOG_PATH, AppConfig, ConfigStore
 from buddy_parallel.runtime.logging_utils import configure_logging
 from buddy_parallel.runtime.runtime_config import read_runtime_config
 from buddy_parallel.runtime.state import StateStore
 from buddy_parallel.services.feishu_bridge import FeishuBridge
+from buddy_parallel.services.instance_lock import InstanceLock
 from buddy_parallel.services.launching import LaunchSpec, build_companion_command
 from buddy_parallel.services.mqtt_notice_bridge import MqttNoticeBridge
 from buddy_parallel.services.startup import StartupManager
@@ -44,6 +46,7 @@ class BuddyParallelApp:
         self.state_store = StateStore()
         self.update_checker = UpdateChecker()
         self.startup_manager = StartupManager()
+        self.instance_lock = InstanceLock(LOCK_PATH)
         self.telegram_bridge = TelegramBridge(self._load_config, self._post_notice_message, self.logger, self.state_store)
         self.feishu_bridge = FeishuBridge(self._load_config, self.logger, self.state_store)
         self.mqtt_notice_bridge = MqttNoticeBridge(self._load_config, self._post_notice_message, self.logger, self.state_store)
@@ -73,6 +76,14 @@ class BuddyParallelApp:
             self._icon = None
 
     def run(self) -> None:
+        lock_result = self.instance_lock.acquire()
+        if not lock_result.acquired:
+            message = "BuddyParallel is already running."
+            self.logger.warning("%s %s", message, lock_result.reason)
+            if not self.headless:
+                self._show_single_instance_notice(message)
+            return
+
         config = self.config_store.load()
         state = self.state_store.load()
         self.logger.info("BuddyParallel starting")
@@ -145,6 +156,7 @@ class BuddyParallelApp:
         self.feishu_bridge.stop()
         self.mqtt_notice_bridge.stop()
         self._stop_runtime()
+        self.instance_lock.release()
         if self._icon is not None:
             self._icon.stop()
 
@@ -745,3 +757,12 @@ class BuddyParallelApp:
         draw.ellipse((18, 16, 46, 44), fill=(91, 192, 190, 255))
         draw.rectangle((24, 28, 40, 48), fill=(245, 166, 35, 255))
         return image
+
+    @staticmethod
+    def _show_single_instance_notice(message: str) -> None:
+        if os.name == "nt":
+            try:
+                ctypes.windll.user32.MessageBoxW(0, message, "BuddyParallel", 0x00000040)
+                return
+            except Exception:
+                pass
