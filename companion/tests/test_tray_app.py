@@ -136,6 +136,7 @@ class TrayAppMenuTests(unittest.TestCase):
                 system_labels,
                 [
                     "Open Settings",
+                    "Setup Board",
                     "Install Hooks",
                     "Logs & Files",
                     "Check Updates",

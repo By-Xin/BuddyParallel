@@ -12,6 +12,8 @@ class BuildWindowsScriptTests(unittest.TestCase):
         self.assertIn("--distpath", script)
         self.assertIn("PythonExe", script)
         self.assertIn(".venv-build", script)
+        self.assertIn("SkipFirmwareCheck", script)
+        self.assertIn("boot_app0.bin", script)
         self.assertIn("Invoke-CheckedExternal", script)
 
 

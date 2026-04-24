@@ -1,5 +1,6 @@
 param(
     [switch]$Clean,
+    [switch]$SkipFirmwareCheck,
     [string]$PythonExe = ""
 )
 
@@ -23,6 +24,13 @@ $specPath = Join-Path $companionRoot "packaging\buddy_parallel.spec"
 $distDir = Join-Path $repoRoot "dist"
 $buildDir = Join-Path $repoRoot "build\pyinstaller"
 $venvPython = Join-Path $companionRoot ".venv-build\Scripts\python.exe"
+$firmwareBuildDir = Join-Path $repoRoot "firmware\.pio\build\m5stickc-plus"
+$firmwareFiles = @(
+    (Join-Path $firmwareBuildDir "bootloader.bin"),
+    (Join-Path $firmwareBuildDir "partitions.bin"),
+    (Join-Path $firmwareBuildDir "firmware.bin"),
+    (Join-Path $repoRoot "firmware\.platformio_local\packages\framework-arduinoespressif32\tools\partitions\boot_app0.bin")
+)
 
 if ($Clean) {
     Remove-Item -Recurse -Force $distDir -ErrorAction SilentlyContinue
@@ -45,6 +53,13 @@ if (-not $PythonExe) {
 
 Write-Host "Building BuddyParallel from $specPath"
 Write-Host "Using Python launcher: $PythonExe"
+
+if (-not $SkipFirmwareCheck) {
+    $missingFirmware = @($firmwareFiles | Where-Object { -not (Test-Path $_) })
+    if ($missingFirmware.Count -gt 0) {
+        throw "Firmware artifacts are missing. Build firmware first or pass -SkipFirmwareCheck for app-only builds: $($missingFirmware -join ', ')"
+    }
+}
 
 $baseArgs = @("-m", "PyInstaller", "--noconfirm", "--clean", "--distpath", $distDir, "--workpath", $buildDir, $specPath)
 

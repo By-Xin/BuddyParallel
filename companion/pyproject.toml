@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "lark-oapi>=1.5,<2",
+  "esptool>=4.7,<5",
   "packaging>=24,<26",
   "paho-mqtt>=1.6,<3",
   "PySocks>=1.7,<2",

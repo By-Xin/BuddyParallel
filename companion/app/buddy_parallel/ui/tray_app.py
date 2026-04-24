@@ -57,6 +57,7 @@ class BuddyParallelApp:
         self._stopping = False
         self._dashboard_process: subprocess.Popen | None = None
         self._settings_process: subprocess.Popen | None = None
+        self._setup_process: subprocess.Popen | None = None
         self._watcher: threading.Thread | None = None
         self._config_mtime = 0.0
 
@@ -84,6 +85,7 @@ class BuddyParallelApp:
                 self._show_single_instance_notice(message)
             return
 
+        first_launch_setup = not self.headless and not self.config_store.path.exists()
         config = self.config_store.load()
         state = self.state_store.load()
         self.logger.info("BuddyParallel starting")
@@ -98,6 +100,12 @@ class BuddyParallelApp:
         self._config_mtime = self._get_config_mtime()
         self._current_config = config
         self._sync_startup(config)
+
+        if first_launch_setup:
+            self._run_first_launch_setup()
+            config = self.config_store.load()
+            self._current_config = config
+            self._config_mtime = self._get_config_mtime()
 
         if self.headless:
             print("BuddyParallel companion running in headless mode.")
@@ -287,6 +295,7 @@ class BuddyParallelApp:
         assert self._Item is not None
         return self._pystray.Menu(
             self._Item("Open Settings", self._open_settings),
+            self._Item("Setup Board", self._open_setup),
             self._Item("Install Hooks", self._install_hooks),
             self._Item("Logs & Files", self._build_files_menu()),
             self._Item("Check Updates", self._check_updates),
@@ -527,6 +536,9 @@ class BuddyParallelApp:
     def _open_settings(self, icon=None, item=None) -> None:
         self._settings_process = self._launch_ui_script(self._settings_process, "settings")
 
+    def _open_setup(self, icon=None, item=None) -> None:
+        self._setup_process = self._launch_ui_script(self._setup_process, "setup")
+
     def _install_hooks(self, icon=None, item=None) -> None:
         try:
             self.install_hooks()
@@ -731,6 +743,12 @@ class BuddyParallelApp:
 
     def _startup_command(self) -> LaunchSpec:
         return build_companion_command("run", windowed=True)
+
+    @staticmethod
+    def _run_first_launch_setup() -> None:
+        from buddy_parallel.ui.setup_window import SetupWindow
+
+        SetupWindow().show()
 
     @staticmethod
     def _launch_ui_script(process: subprocess.Popen | None, command_name: str) -> subprocess.Popen | None:

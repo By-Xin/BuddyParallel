@@ -15,6 +15,7 @@ tmp*/
 build/
 dist/
 *.spec
+!companion/packaging/buddy_parallel.spec
 *.exe
 *.log
 *.tmp
