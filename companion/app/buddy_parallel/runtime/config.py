@@ -26,7 +26,6 @@ DEFAULT_UPDATE_MANIFEST_URL = ""
 @dataclass
 class AppConfig:
     transport_mode: str = "auto"
-    board_profile: str = "auto"
     serial_port: str = ""
     serial_baud: int = 115200
     ble_device_name: str = ""
@@ -80,8 +79,6 @@ def parse_month_day(value: str) -> tuple[int | None, int | None]:
 def validate_config(config: AppConfig) -> AppConfig:
     if config.transport_mode not in {"auto", "serial", "ble", "mock"}:
         raise ValueError("transport_mode must be auto, serial, ble, or mock")
-    if config.board_profile not in {"auto", "m5stickc-plus", "m5stack-cores3"}:
-        raise ValueError("board_profile must be auto, m5stickc-plus, or m5stack-cores3")
     if config.notice_transport not in {"off", "telegram", "mqtt", "feishu"}:
         raise ValueError("notice_transport must be off, telegram, mqtt, or feishu")
     if config.serial_baud <= 0:

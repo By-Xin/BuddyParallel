@@ -10,14 +10,11 @@ class CliParserTests(unittest.TestCase):
         parser = build_parser()
 
         setup_args = parser.parse_args(["setup"])
-        flash_args = parser.parse_args(
-            ["flash-board", "--port", "COM7", "--board", "m5stack-cores3", "--firmware-dir", "firmware", "--erase"]
-        )
+        flash_args = parser.parse_args(["flash-board", "--port", "COM7", "--firmware-dir", "firmware", "--erase"])
 
         self.assertEqual(setup_args.command, "setup")
         self.assertEqual(flash_args.command, "flash-board")
         self.assertEqual(flash_args.port, "COM7")
-        self.assertEqual(flash_args.board, "m5stack-cores3")
         self.assertEqual(flash_args.firmware_dir, "firmware")
         self.assertTrue(flash_args.erase)
 

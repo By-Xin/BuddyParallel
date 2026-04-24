@@ -20,31 +20,11 @@ if (-not (Test-Path $setupShortcut)) {
 }
 
 $requiredFirmware = @("bootloader.bin", "partitions.bin", "boot_app0.bin", "firmware.bin")
-$primaryFirmwareDir = Join-Path $appDir "_internal\firmware\m5stickc-plus"
-if (-not (Test-Path $primaryFirmwareDir)) {
-    $primaryFirmwareDir = Join-Path $appDir "firmware\m5stickc-plus"
-}
 foreach ($name in $requiredFirmware) {
-    $match = Get-ChildItem -Path $primaryFirmwareDir -Filter $name -ErrorAction SilentlyContinue | Select-Object -First 1
+    $match = Get-ChildItem -Path $appDir -Recurse -Filter $name -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -eq $match) {
-        throw "Packaged M5StickC Plus firmware artifact not found in ${primaryFirmwareDir}: $name"
+        throw "Packaged firmware artifact not found in ${appDir}: $name"
     }
-}
-
-$coreS3FirmwareDir = Join-Path $appDir "_internal\firmware\m5stack-cores3"
-if (-not (Test-Path $coreS3FirmwareDir)) {
-    $coreS3FirmwareDir = Join-Path $appDir "firmware\m5stack-cores3"
-}
-$coreS3FirmwareBin = Join-Path $coreS3FirmwareDir "firmware.bin"
-if (Test-Path $coreS3FirmwareBin) {
-    foreach ($name in $requiredFirmware) {
-        $match = Get-ChildItem -Path $coreS3FirmwareDir -Filter $name -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($null -eq $match) {
-            throw "Packaged CoreS3 firmware artifact not found in ${coreS3FirmwareDir}: $name"
-        }
-    }
-} else {
-    Write-Warning "CoreS3 firmware.bin is not present in this package yet. Build env:m5stack-cores3 before cutting a CoreS3-enabled release: $coreS3FirmwareDir"
 }
 
 $forbiddenConfigNames = @(

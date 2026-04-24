@@ -19,11 +19,6 @@ class AppConfigTests(unittest.TestCase):
 
         self.assertEqual(config.notice_transport, "off")
 
-    def test_validate_config_accepts_core_s3_board_profile(self) -> None:
-        config = validate_config(AppConfig(board_profile="m5stack-cores3"))
-
-        self.assertEqual(config.board_profile, "m5stack-cores3")
-
 
 if __name__ == "__main__":
     unittest.main()

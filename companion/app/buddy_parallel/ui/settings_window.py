@@ -20,7 +20,6 @@ class SettingsWindow:
 
         fields = {
             "transport_mode": tk.StringVar(master=root, value=config.transport_mode),
-            "board_profile": tk.StringVar(master=root, value=config.board_profile),
             "serial_port": tk.StringVar(master=root, value=config.serial_port),
             "serial_baud": tk.StringVar(master=root, value=str(config.serial_baud)),
             "ble_device_name": tk.StringVar(master=root, value=config.ble_device_name),
@@ -91,17 +90,6 @@ class SettingsWindow:
         self._row(
             transport_group,
             0,
-            "Board Type",
-            ttk.Combobox(
-                transport_group,
-                textvariable=fields["board_profile"],
-                values=["auto", "m5stickc-plus", "m5stack-cores3"],
-                state="readonly",
-            ),
-        )
-        self._row(
-            transport_group,
-            1,
             "Transport Mode",
             ttk.Combobox(
                 transport_group,
@@ -111,13 +99,13 @@ class SettingsWindow:
             ),
         )
         serial_group = ttk.LabelFrame(transport_group, text="Serial", padding=8)
-        serial_group.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 8))
+        serial_group.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 8))
         serial_group.columnconfigure(1, weight=1)
         self._row(serial_group, 0, "Serial Port", ttk.Entry(serial_group, textvariable=fields["serial_port"]))
         self._row(serial_group, 1, "Serial Baud", ttk.Entry(serial_group, textvariable=fields["serial_baud"]))
 
         ble_group = ttk.LabelFrame(transport_group, text="Bluetooth", padding=8)
-        ble_group.grid(row=4, column=0, columnspan=2, sticky="ew")
+        ble_group.grid(row=3, column=0, columnspan=2, sticky="ew")
         ble_group.columnconfigure(1, weight=1)
         self._row(ble_group, 0, "BLE Device Name", ttk.Entry(ble_group, textvariable=fields["ble_device_name"]))
 
@@ -280,7 +268,6 @@ class SettingsWindow:
             return validate_config(
                 AppConfig(
                     transport_mode=fields["transport_mode"].get().strip() or "auto",
-                    board_profile=fields["board_profile"].get().strip() or "auto",
                     serial_port=fields["serial_port"].get().strip(),
                     serial_baud=int(fields["serial_baud"].get().strip() or "115200"),
                     ble_device_name=fields["ble_device_name"].get().strip(),

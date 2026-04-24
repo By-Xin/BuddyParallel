@@ -48,34 +48,6 @@ class BoardSetupTests(unittest.TestCase):
             ["0x1000", "0x8000", "0xe000", "0x10000"],
         )
 
-    def test_core_s3_bundle_uses_s3_chip_and_bootloader_address(self) -> None:
-        with _temporary_directory() as root:
-            _make_firmware_bundle(root)
-
-            bundle = board_setup.find_firmware_bundle(root, board_id="m5stack-cores3")
-            args = board_setup.build_write_flash_args("COM8", bundle)
-
-        self.assertIn("esp32s3", args)
-        self.assertEqual(
-            [args[index] for index in range(args.index("0x0"), len(args), 2)],
-            ["0x0", "0x8000", "0xe000", "0x10000"],
-        )
-
-    def test_core_s3_usb_identity_is_inferred(self) -> None:
-        device = SerialDeviceInfo(
-            "COM8",
-            "USB JTAG/serial debug unit",
-            "Espressif",
-            "USB VID:PID=303A:8119",
-            0x303A,
-            0x8119,
-        )
-
-        profile = board_setup.infer_board_profile(device)
-
-        self.assertIsNotNone(profile)
-        self.assertEqual(profile.id, "m5stack-cores3")
-
     def test_choose_board_port_prefers_existing_buddy_firmware(self) -> None:
         devices = [
             SerialDeviceInfo("COM3", "Bluetooth Serial", "Windows"),

@@ -20,10 +20,6 @@ class SerialDeviceInfo:
     device: str
     description: str = ""
     manufacturer: str = ""
-    hwid: str = ""
-    vid: int | None = None
-    pid: int | None = None
-    serial_number: str = ""
 
 
 class SerialTransport(TransportBase):
@@ -166,10 +162,6 @@ def discover_serial_devices() -> list[SerialDeviceInfo]:
                 device=getattr(port, "device", ""),
                 description=getattr(port, "description", ""),
                 manufacturer=getattr(port, "manufacturer", ""),
-                hwid=getattr(port, "hwid", ""),
-                vid=getattr(port, "vid", None),
-                pid=getattr(port, "pid", None),
-                serial_number=getattr(port, "serial_number", "") or "",
             )
         )
     return devices

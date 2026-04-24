@@ -23,7 +23,10 @@ hiddenimports = sorted(
     )
 )
 
-boot_app0 = (
+firmware_sources = [
+    REPO_ROOT / "firmware" / ".pio" / "build" / "m5stickc-plus" / "bootloader.bin",
+    REPO_ROOT / "firmware" / ".pio" / "build" / "m5stickc-plus" / "partitions.bin",
+    REPO_ROOT / "firmware" / ".pio" / "build" / "m5stickc-plus" / "firmware.bin",
     REPO_ROOT
     / "firmware"
     / ".platformio_local"
@@ -31,21 +34,9 @@ boot_app0 = (
     / "framework-arduinoespressif32"
     / "tools"
     / "partitions"
-    / "boot_app0.bin"
-)
-firmware_envs = ["m5stickc-plus", "m5stack-cores3"]
-firmware_sources = []
-for env_name in firmware_envs:
-    build_dir = REPO_ROOT / "firmware" / ".pio" / "build" / env_name
-    firmware_sources.extend(
-        [
-            (build_dir / "bootloader.bin", f"firmware/{env_name}"),
-            (build_dir / "partitions.bin", f"firmware/{env_name}"),
-            (build_dir / "firmware.bin", f"firmware/{env_name}"),
-        ]
-    )
-    firmware_sources.append((boot_app0, f"firmware/{env_name}"))
-datas = collect_data_files("esptool") + [(str(path), dest) for path, dest in firmware_sources if path.exists()]
+    / "boot_app0.bin",
+]
+datas = collect_data_files("esptool") + [(str(path), "firmware") for path in firmware_sources if path.exists()]
 excludes = [
     "IPython",
     "PyQt5",
