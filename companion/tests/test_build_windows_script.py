@@ -11,6 +11,8 @@ class BuildWindowsScriptTests(unittest.TestCase):
         self.assertIn("buddy_parallel.spec", script)
         self.assertIn("--distpath", script)
         self.assertIn("PythonExe", script)
+        self.assertIn(".venv-build", script)
+        self.assertIn("Invoke-CheckedExternal", script)
 
 
 if __name__ == "__main__":

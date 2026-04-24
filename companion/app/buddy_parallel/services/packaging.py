@@ -51,6 +51,7 @@ def build_notes() -> str:
         Build commands
         --------------
         - source diagnostics: `buddy-parallel packaging-notes`
+        - prepare build venv: `powershell -ExecutionPolicy Bypass -File companion\\scripts\\prepare_build_env.ps1`
         - Windows build script: `powershell -ExecutionPolicy Bypass -File companion\\scripts\\build_windows.ps1`
         - PyInstaller spec: `{companion_root() / "packaging" / "buddy_parallel.spec"}`
         - default output dir: `{repo_root() / "dist"}`

@@ -4,6 +4,7 @@ __pycache__/
 *.pyd
 .venv/
 .venv*/
+*.egg-info/
 .pio/
 firmware/.platformio_local/
 vscode-extension/.vscode/

@@ -22,10 +22,18 @@ Turn the current developer-friendly BuddyParallel checkout into a Windows build 
 ## Current build skeleton
 
 - PyInstaller spec: `companion/packaging/buddy_parallel.spec`
+- build venv bootstrap: `companion/scripts/prepare_build_env.ps1`
 - build script: `companion/scripts/build_windows.ps1`
 - shared launch helper: `companion/app/buddy_parallel/services/launching.py`
 - packaging notes: `buddy-parallel packaging-notes`
 - current slimming strategy: explicitly exclude unrelated scientific, notebook, Qt, and test toolchains from the frozen build
+
+## Preferred build flow
+
+1. `powershell -ExecutionPolicy Bypass -File companion/scripts/prepare_build_env.ps1`
+2. `powershell -ExecutionPolicy Bypass -File companion/scripts/build_windows.ps1 -Clean`
+3. inspect `dist/BuddyParallel.exe`
+4. smoke-test tray launch and core device behavior from the packaged build
 
 ## Immediate checklist
 
