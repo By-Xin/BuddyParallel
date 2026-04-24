@@ -34,7 +34,8 @@ Turn the current developer-friendly BuddyParallel checkout into a Windows build 
 1. `powershell -ExecutionPolicy Bypass -File companion/scripts/prepare_build_env.ps1`
 2. `powershell -ExecutionPolicy Bypass -File companion/scripts/build_windows.ps1 -Clean`
 3. inspect `dist/BuddyParallel/BuddyParallel.exe`
-4. smoke-test tray launch and core device behavior from the packaged build
+4. `powershell -ExecutionPolicy Bypass -File companion/scripts/smoke_packaged_windows.ps1`
+5. smoke-test core device behavior from the packaged build
 
 ## Immediate checklist
 
