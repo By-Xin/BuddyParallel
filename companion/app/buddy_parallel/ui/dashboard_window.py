@@ -7,7 +7,7 @@ import tkinter as tk
 import urllib.error
 import urllib.request
 import webbrowser
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from tkinter import messagebox, ttk
 
@@ -93,7 +93,7 @@ def build_dashboard_model(config: AppConfig, runtime: dict | None, state: Runtim
     elif active:
         status_caption = "Companion is active, but hardware is not currently connected."
     else:
-        status_caption = "Companion is idle. Open Settings if you want to change transport or notice sources."
+        status_caption = "Companion is idle. Open the Settings tab if you want to change transport or notice sources."
 
     return DashboardModel(
         status_badge=status_badge,
@@ -106,14 +106,24 @@ def build_dashboard_model(config: AppConfig, runtime: dict | None, state: Runtim
 
 
 class DashboardWindow:
-    def __init__(self, config_store: ConfigStore | None = None, state_store: StateStore | None = None) -> None:
+    def __init__(
+        self,
+        config_store: ConfigStore | None = None,
+        state_store: StateStore | None = None,
+        *,
+        initial_tab: str = "overview",
+    ) -> None:
         self._config_store = config_store or ConfigStore()
         self._state_store = state_store or StateStore()
         self._update_checker = UpdateChecker()
+        self._initial_tab = initial_tab
         self._root: tk.Tk | None = None
         self._refresh_job: str | None = None
         self._settings_process: subprocess.Popen | None = None
         self._vars: dict[str, tk.StringVar] = {}
+        self._settings_fields: dict[str, tk.StringVar] = {}
+        self._settings_bools: dict[str, tk.BooleanVar] = {}
+        self._notebook: ttk.Notebook | None = None
         self._hardware_snapshot = parse_hardware_snapshot(None)
         self._brightness_var: tk.StringVar | None = None
         self._pet_var: tk.StringVar | None = None
@@ -141,8 +151,8 @@ class DashboardWindow:
         self._brightness_var = tk.StringVar(master=root, value="")
         self._pet_var = tk.StringVar(master=root, value="")
         root.title("BuddyParallel")
-        root.geometry("940x680")
-        root.minsize(860, 620)
+        root.geometry("1040x760")
+        root.minsize(920, 680)
         self._configure_style(root)
         self._build_ui(root)
         self._refresh()
@@ -152,18 +162,17 @@ class DashboardWindow:
     def _build_ui(self, root: tk.Tk) -> None:
         outer = ttk.Frame(root, padding=12)
         outer.pack(fill="both", expand=True)
-        outer.columnconfigure(0, weight=3)
-        outer.columnconfigure(1, weight=2)
+        outer.columnconfigure(0, weight=1)
         outer.rowconfigure(1, weight=1)
 
         header = ttk.Frame(outer)
-        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         header.columnconfigure(0, weight=1)
 
         ttk.Label(header, text="BuddyParallel", style="Heading.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(
             header,
-            text="Separated from Settings. This window is only for live status and quick actions.",
+            text="Control panel for live status, hardware, services, settings, and release tools.",
             style="Muted.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(4, 2))
         ttk.Label(header, textvariable=self._vars["status_caption"], wraplength=620).grid(row=2, column=0, sticky="w")
@@ -180,24 +189,42 @@ class DashboardWindow:
             sticky="e",
         )
 
-        left = ttk.Frame(outer)
-        left.grid(row=1, column=0, sticky="nsew", padx=(0, 8))
-        left.columnconfigure(0, weight=1)
+        self._notebook = ttk.Notebook(outer)
+        self._notebook.grid(row=1, column=0, sticky="nsew")
 
-        right = ttk.Frame(outer)
-        right.grid(row=1, column=1, sticky="nsew")
-        right.columnconfigure(0, weight=1)
+        overview_tab = ttk.Frame(self._notebook, padding=12)
+        hardware_tab = ttk.Frame(self._notebook, padding=12)
+        services_tab = ttk.Frame(self._notebook, padding=12)
+        settings_tab = ttk.Frame(self._notebook, padding=12)
+        files_tab = ttk.Frame(self._notebook, padding=12)
+        for tab in (overview_tab, hardware_tab, services_tab, settings_tab, files_tab):
+            tab.columnconfigure(0, weight=1)
 
-        self._build_group(left, 0, "Runtime", "What the companion is doing right now.", self._vars["runtime"])
-        self._build_group(left, 1, "Hardware", "Current device connection and control snapshot.", self._vars["hardware"])
-        self._build_group(left, 2, "Services", "Notice and weather bridge health.", self._vars["services"])
+        self._notebook.add(overview_tab, text="Overview")
+        self._notebook.add(hardware_tab, text="Hardware")
+        self._notebook.add(services_tab, text="Services")
+        self._notebook.add(settings_tab, text="Settings")
+        self._notebook.add(files_tab, text="Files & Release")
 
-        self._build_group(right, 0, "Current Setup", "The configuration currently steering the companion.", self._vars["setup"])
-        self._build_hardware_controls(right, 1)
-        self._build_actions(right, 2)
+        self._build_group(overview_tab, 0, "Runtime", "What the companion is doing right now.", self._vars["runtime"])
+        self._build_group(overview_tab, 1, "Current Setup", "The configuration currently steering the companion.", self._vars["setup"])
+        self._build_group(hardware_tab, 0, "Hardware", "Current device connection and control snapshot.", self._vars["hardware"])
+        self._build_hardware_controls(hardware_tab, 1)
+        self._build_group(services_tab, 0, "Services", "Notice and weather bridge health.", self._vars["services"])
+        self._build_settings_tab(settings_tab)
+        self._build_actions(files_tab, 0)
+
+        tab_by_name = {
+            "overview": 0,
+            "hardware": 1,
+            "services": 2,
+            "settings": 3,
+            "files": 4,
+        }
+        self._notebook.select(tab_by_name.get(self._initial_tab, 0))
 
         footer = ttk.Frame(outer)
-        footer.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        footer.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         ttk.Label(footer, textvariable=self._vars["refreshed"], style="Muted.TLabel").pack(anchor="w")
 
     def _build_group(
@@ -222,13 +249,12 @@ class DashboardWindow:
         actions.columnconfigure(1, weight=1)
         ttk.Label(
             actions,
-            text="Simple shortcuts only. Settings, files, and maintenance stay grouped here.",
+            text="Files, maintenance, and install helpers for the local beta.",
             style="Muted.TLabel",
             wraplength=320,
         ).grid(row=0, column=0, columnspan=2, sticky="w")
 
         specs = [
-            ("Open Settings", self._open_settings),
             ("Refresh Now", self._refresh),
             ("Open Config", lambda: self._open_path(CONFIG_PATH)),
             ("Open Log", lambda: self._open_path(LOG_PATH)),
@@ -245,6 +271,124 @@ class DashboardWindow:
                 padx=(0, 6) if index % 2 == 0 else (6, 0),
                 pady=(8, 0),
             )
+
+    def _build_settings_tab(self, parent: ttk.Frame) -> None:
+        config = self._config_store.load()
+        fields = {
+            "transport_mode": tk.StringVar(master=parent, value=config.transport_mode),
+            "serial_port": tk.StringVar(master=parent, value=config.serial_port),
+            "serial_baud": tk.StringVar(master=parent, value=str(config.serial_baud)),
+            "notice_transport": tk.StringVar(master=parent, value=config.notice_transport),
+            "weather_location_query": tk.StringVar(master=parent, value=config.weather_location_query),
+            "weather_refresh_minutes": tk.StringVar(master=parent, value=str(config.weather_refresh_minutes)),
+            "owner_name": tk.StringVar(master=parent, value=config.owner_name),
+            "device_name": tk.StringVar(master=parent, value=config.device_name),
+            "birthday_mmdd": tk.StringVar(master=parent, value=config.birthday_mmdd),
+            "birthday_name": tk.StringVar(master=parent, value=config.birthday_name),
+            "hook_server_port": tk.StringVar(master=parent, value=str(config.hook_server_port)),
+            "api_server_port": tk.StringVar(master=parent, value=str(config.api_server_port)),
+            "update_manifest_url": tk.StringVar(master=parent, value=config.update_manifest_url),
+        }
+        bools = {
+            "weather_enabled": tk.BooleanVar(master=parent, value=config.weather_enabled),
+            "festive_themes_enabled": tk.BooleanVar(master=parent, value=config.festive_themes_enabled),
+            "auto_start": tk.BooleanVar(master=parent, value=config.auto_start),
+        }
+        self._settings_fields = fields
+        self._settings_bools = bools
+
+        general = self._settings_group(parent, 0, "General")
+        self._settings_row(general, 0, "Owner", ttk.Entry(general, textvariable=fields["owner_name"]))
+        self._settings_row(general, 1, "Device", ttk.Entry(general, textvariable=fields["device_name"]))
+        ttk.Checkbutton(general, text="Launch at startup", variable=bools["auto_start"]).grid(row=3, column=1, sticky="w", pady=4)
+
+        transport = self._settings_group(parent, 1, "Device Transport")
+        self._settings_row(
+            transport,
+            0,
+            "Mode",
+            ttk.Combobox(transport, textvariable=fields["transport_mode"], values=["auto", "serial", "ble", "mock"], state="readonly"),
+        )
+        self._settings_row(transport, 1, "Serial Port", ttk.Entry(transport, textvariable=fields["serial_port"]))
+        self._settings_row(transport, 2, "Serial Baud", ttk.Entry(transport, textvariable=fields["serial_baud"]))
+
+        services = self._settings_group(parent, 2, "Services")
+        self._settings_row(
+            services,
+            0,
+            "Notice Source",
+            ttk.Combobox(services, textvariable=fields["notice_transport"], values=["off", "telegram", "mqtt", "feishu"], state="readonly"),
+        )
+        ttk.Checkbutton(services, text="Weather sync", variable=bools["weather_enabled"]).grid(row=2, column=1, sticky="w", pady=4)
+        self._settings_row(services, 2, "Weather Location", ttk.Entry(services, textvariable=fields["weather_location_query"]))
+        self._settings_row(services, 3, "Refresh Minutes", ttk.Entry(services, textvariable=fields["weather_refresh_minutes"]))
+
+        themes = self._settings_group(parent, 3, "Themes")
+        ttk.Checkbutton(themes, text="Enable one-shot special day greeting", variable=bools["festive_themes_enabled"]).grid(
+            row=1,
+            column=1,
+            sticky="w",
+            pady=4,
+        )
+        self._settings_row(themes, 1, "Birthday", ttk.Entry(themes, textvariable=fields["birthday_mmdd"]))
+        self._settings_row(themes, 2, "Greeting Name", ttk.Entry(themes, textvariable=fields["birthday_name"]))
+
+        advanced = self._settings_group(parent, 4, "Advanced")
+        self._settings_row(advanced, 0, "Hook Port", ttk.Entry(advanced, textvariable=fields["hook_server_port"]))
+        self._settings_row(advanced, 1, "API Port", ttk.Entry(advanced, textvariable=fields["api_server_port"]))
+        self._settings_row(advanced, 2, "Update URL", ttk.Entry(advanced, textvariable=fields["update_manifest_url"]))
+
+        footer = ttk.Frame(parent)
+        footer.grid(row=5, column=0, sticky="ew", pady=(4, 0))
+        footer.columnconfigure(0, weight=1)
+        ttk.Label(footer, text="Save writes config immediately; the tray runtime reloads automatically.", style="Muted.TLabel").grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+        ttk.Button(footer, text="Save Settings", command=self._save_settings).grid(row=0, column=1, sticky="e")
+
+    @staticmethod
+    def _settings_group(parent: ttk.Frame, row: int, title: str) -> ttk.LabelFrame:
+        group = ttk.LabelFrame(parent, text=title, padding=10)
+        group.grid(row=row, column=0, sticky="ew", pady=(0, 8))
+        group.columnconfigure(1, weight=1)
+        return group
+
+    @staticmethod
+    def _settings_row(parent: ttk.Frame, row: int, label: str, widget: tk.Widget) -> None:
+        ttk.Label(parent, text=label, width=18).grid(row=row + 1, column=0, sticky="w", padx=(0, 10), pady=4)
+        widget.grid(row=row + 1, column=1, sticky="ew", pady=4)
+
+    def _save_settings(self) -> None:
+        fields = self._settings_fields
+        bools = self._settings_bools
+        try:
+            current = self._config_store.load()
+            updated = replace(
+                current,
+                transport_mode=fields["transport_mode"].get().strip() or "auto",
+                serial_port=fields["serial_port"].get().strip(),
+                serial_baud=int(fields["serial_baud"].get().strip() or "115200"),
+                notice_transport=fields["notice_transport"].get().strip() or "off",
+                weather_enabled=bool(bools["weather_enabled"].get()),
+                weather_location_query=fields["weather_location_query"].get().strip(),
+                weather_refresh_minutes=max(1, int(fields["weather_refresh_minutes"].get().strip() or "30")),
+                owner_name=fields["owner_name"].get().strip(),
+                device_name=fields["device_name"].get().strip() or "BuddyParallel",
+                festive_themes_enabled=bool(bools["festive_themes_enabled"].get()),
+                birthday_mmdd=fields["birthday_mmdd"].get().strip(),
+                birthday_name=fields["birthday_name"].get().strip(),
+                hook_server_port=int(fields["hook_server_port"].get().strip() or "43111"),
+                api_server_port=int(fields["api_server_port"].get().strip() or "43112"),
+                auto_start=bool(bools["auto_start"].get()),
+                update_manifest_url=fields["update_manifest_url"].get().strip(),
+            )
+            self._config_store.save(updated)
+            messagebox.showinfo("BuddyParallel", "Settings saved. The tray companion will reload automatically.")
+            self._refresh()
+        except Exception as exc:
+            messagebox.showerror("BuddyParallel", str(exc))
 
     def _build_hardware_controls(self, parent: ttk.Frame, row: int) -> None:
         controls = ttk.LabelFrame(parent, text="Hardware Controls", padding=10)
@@ -529,6 +673,9 @@ class DashboardWindow:
 
 
 def _notice_status_line(config: AppConfig, state: RuntimeState) -> str:
+    if config.notice_transport == "off":
+        return "Notice: off"
+
     if config.notice_transport == "mqtt":
         if state.last_mqtt_error:
             return f"Notice: MQTT error | {state.last_mqtt_error}"
@@ -554,6 +701,8 @@ def _notice_status_line(config: AppConfig, state: RuntimeState) -> str:
 
 
 def _compact_notice_label(config: AppConfig, state: RuntimeState) -> str:
+    if config.notice_transport == "off":
+        return "off"
     if config.notice_transport == "mqtt":
         if state.last_mqtt_error:
             return "mqtt error"
@@ -581,8 +730,8 @@ def _on_off_label(value: bool | None) -> str:
     return "on" if value else "off"
 
 
-def main() -> None:
-    DashboardWindow().show()
+def main(initial_tab: str = "overview") -> None:
+    DashboardWindow(initial_tab=initial_tab).show()
 
 
 if __name__ == "__main__":

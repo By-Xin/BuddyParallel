@@ -14,6 +14,11 @@ class AppConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "birthday_mmdd"):
             validate_config(AppConfig(birthday_mmdd="13-99"))
 
+    def test_default_notice_transport_is_off(self) -> None:
+        config = validate_config(AppConfig())
+
+        self.assertEqual(config.notice_transport, "off")
+
 
 if __name__ == "__main__":
     unittest.main()

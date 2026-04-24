@@ -137,7 +137,7 @@ class SettingsWindow:
             ttk.Combobox(
                 source_group,
                 textvariable=fields["notice_transport"],
-                values=["telegram", "mqtt", "feishu"],
+                values=["off", "telegram", "mqtt", "feishu"],
                 state="readonly",
             ),
         )
@@ -271,7 +271,7 @@ class SettingsWindow:
                     serial_port=fields["serial_port"].get().strip(),
                     serial_baud=int(fields["serial_baud"].get().strip() or "115200"),
                     ble_device_name=fields["ble_device_name"].get().strip(),
-                    notice_transport=fields["notice_transport"].get().strip() or "telegram",
+                    notice_transport=fields["notice_transport"].get().strip() or "off",
                     notice_mqtt_url=fields["notice_mqtt_url"].get().strip(),
                     notice_mqtt_topic=fields["notice_mqtt_topic"].get().strip() or "devices/mcu1/notice",
                     notice_mqtt_username=fields["notice_mqtt_username"].get().strip(),
@@ -322,10 +322,12 @@ class SettingsWindow:
                 ble_group.grid_remove()
 
         def sync_notice_fields(*_args) -> None:
-            current = fields["notice_transport"].get().strip() or "telegram"
+            current = fields["notice_transport"].get().strip() or "off"
             telegram_group.grid_remove()
             feishu_group.grid_remove()
             mqtt_group.grid_remove()
+            if current == "off":
+                return
             if current == "telegram":
                 telegram_group.grid()
             elif current == "feishu":

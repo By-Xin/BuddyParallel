@@ -36,9 +36,9 @@ def main() -> None:
 
         raise SystemExit(feishu_helper_main(api_port=args.api_port or None))
     if args.command == "settings":
-        from buddy_parallel.ui.settings_window import main as settings_main
+        from buddy_parallel.ui.dashboard_window import main as dashboard_main
 
-        settings_main()
+        dashboard_main(initial_tab="settings")
         return
     if args.command == "dashboard":
         from buddy_parallel.ui.dashboard_window import main as dashboard_main

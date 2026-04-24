@@ -126,12 +126,15 @@ def _build_proxy_aware_client(
                 "json": {"AppID": self._app_id, "AppSecret": self._app_secret},
                 "timeout": 10,
             }
+            session = requests_lib.Session()
             if self._bp_proxy_url:
                 request_kwargs["proxies"] = {
                     "http": self._bp_proxy_url,
                     "https": self._bp_proxy_url,
                 }
-            response = requests_lib.post(self._domain + GEN_ENDPOINT_URI, **request_kwargs)
+            else:
+                session.trust_env = False
+            response = session.post(self._domain + GEN_ENDPOINT_URI, **request_kwargs)
             if response.status_code != http.HTTPStatus.OK:
                 raise ServerException(response.status_code, "system busy")
 

@@ -82,7 +82,9 @@ class BuddyParallelApp:
             message = "BuddyParallel is already running."
             self.logger.warning("%s %s", message, lock_result.reason)
             if not self.headless:
-                self._show_single_instance_notice(message)
+                self._open_dashboard()
+            else:
+                print(message)
             return
 
         first_launch_setup = not self.headless and not self.config_store.path.exists()
@@ -121,6 +123,7 @@ class BuddyParallelApp:
         self._watcher = threading.Thread(target=self._watch_config_loop, name="bp-config-watcher", daemon=True)
         self._watcher.start()
         self._refresh_menu()
+        self._open_dashboard()
         assert self._icon is not None
         self._icon.run()
 
@@ -206,6 +209,8 @@ class BuddyParallelApp:
 
     def _notice_label(self) -> str:
         config = self.config_store.load()
+        if config.notice_transport == "off":
+            return "Notice off"
         if config.notice_transport == "mqtt":
             status = self.mqtt_notice_bridge.status()
             prefix = "Notice MQTT OK" if status.mqtt_ok else "Notice MQTT idle"
@@ -294,7 +299,7 @@ class BuddyParallelApp:
         assert self._pystray is not None
         assert self._Item is not None
         return self._pystray.Menu(
-            self._Item("Open Settings", self._open_settings),
+            self._Item("Open Control Panel", self._open_dashboard),
             self._Item("Setup Board", self._open_setup),
             self._Item("Install Hooks", self._install_hooks),
             self._Item("Logs & Files", self._build_files_menu()),
@@ -702,6 +707,11 @@ class BuddyParallelApp:
         self._refresh_menu()
 
     def _sync_notice_bridge(self, config: AppConfig) -> None:
+        if config.notice_transport == "off":
+            self.feishu_bridge.stop()
+            self.mqtt_notice_bridge.stop()
+            self.telegram_bridge.stop()
+            return
         if config.notice_transport == "mqtt":
             self.feishu_bridge.stop()
             self.telegram_bridge.stop()

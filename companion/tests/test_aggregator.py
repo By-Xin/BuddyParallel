@@ -161,6 +161,21 @@ class AggregatorCompletionTests(unittest.TestCase):
         self.assertEqual(heartbeat["theme"]["subtitle"], "Birthday")
         self.assertIn("Xin", heartbeat["theme"]["detail"])
 
+    def test_birthday_theme_is_a_daily_pulse_not_a_repeating_screensaver(self) -> None:
+        aggregator = StateAggregator(
+            config=AppConfig(
+                festive_themes_enabled=True,
+                birthday_mmdd="04-24",
+                birthday_name="Xin",
+            )
+        )
+
+        first = aggregator.build_heartbeat(today=date(2026, 4, 24))
+        second = aggregator.build_heartbeat(today=date(2026, 4, 24))
+
+        self.assertEqual(first["theme"]["key"], "birthday")
+        self.assertIsNone(second["theme"])
+
     def test_christmas_theme_does_not_override_active_work(self) -> None:
         aggregator = StateAggregator(config=AppConfig(festive_themes_enabled=True))
         aggregator.apply_event(

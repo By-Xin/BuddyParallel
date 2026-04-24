@@ -108,7 +108,7 @@ class TrayAppMenuTests(unittest.TestCase):
                 [
                     "No Claude connected",
                     "Weather off",
-                    "Notice Telegram idle | idle",
+                    "Notice off",
                     "Controls | brightness ? | sound ? | led ?",
                     "Device | not connected",
                     "Battery | unavailable",
@@ -135,7 +135,7 @@ class TrayAppMenuTests(unittest.TestCase):
             self.assertEqual(
                 system_labels,
                 [
-                    "Open Settings",
+                    "Open Control Panel",
                     "Setup Board",
                     "Install Hooks",
                     "Logs & Files",

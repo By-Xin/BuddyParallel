@@ -63,6 +63,12 @@ class DashboardWindowTests(unittest.TestCase):
         self.assertIn("Notice: Telegram idle", model.service_lines)
         self.assertIn("Weather: off", model.service_lines)
 
+    def test_build_dashboard_model_formats_notice_off(self) -> None:
+        model = build_dashboard_model(AppConfig(), {}, RuntimeState(last_telegram_error="old error"))
+
+        self.assertIn("Notice: off", model.service_lines)
+        self.assertIn("Notice source: off", model.setup_lines)
+
 
 if __name__ == "__main__":
     unittest.main()

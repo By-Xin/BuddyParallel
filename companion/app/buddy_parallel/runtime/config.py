@@ -29,7 +29,7 @@ class AppConfig:
     serial_port: str = ""
     serial_baud: int = 115200
     ble_device_name: str = ""
-    notice_transport: str = "telegram"
+    notice_transport: str = "off"
     notice_mqtt_url: str = ""
     notice_mqtt_topic: str = "devices/mcu1/notice"
     notice_mqtt_username: str = ""
@@ -79,8 +79,8 @@ def parse_month_day(value: str) -> tuple[int | None, int | None]:
 def validate_config(config: AppConfig) -> AppConfig:
     if config.transport_mode not in {"auto", "serial", "ble", "mock"}:
         raise ValueError("transport_mode must be auto, serial, ble, or mock")
-    if config.notice_transport not in {"telegram", "mqtt", "feishu"}:
-        raise ValueError("notice_transport must be telegram, mqtt, or feishu")
+    if config.notice_transport not in {"off", "telegram", "mqtt", "feishu"}:
+        raise ValueError("notice_transport must be off, telegram, mqtt, or feishu")
     if config.serial_baud <= 0:
         raise ValueError("serial_baud must be positive")
     if config.notice_mqtt_keepalive_seconds <= 0:

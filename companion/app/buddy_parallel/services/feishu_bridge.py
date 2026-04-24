@@ -156,4 +156,4 @@ class FeishuBridge:
             self._terminate_process()
             self._refresh_status(process_alive=False)
             if should_backoff and not self._stop.is_set():
-                self._sleep_or_reload(3.0)
+                self._sleep_or_reload(30.0)
