@@ -5,6 +5,10 @@ __pycache__/
 .venv/
 .venv*/
 .pio/
+firmware/.platformio_local/
+vscode-extension/.vscode/
+companion/tmp*/
+tmp*/
 build/
 dist/
 *.spec

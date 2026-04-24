@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -44,11 +46,17 @@ class _FakeSerialTransport:
 
 class CompanionRuntimeTests(unittest.TestCase):
     def test_ensure_serial_session_bootstraps_without_sync_status_wait(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            runtime = CompanionRuntime(
-                config=AppConfig(transport_mode="serial", owner_name="Zhiyun", device_name="Buddy"),
-                state_store=StateStore(Path(temp_dir) / "state.json"),
-            )
+        temp_dir = Path(tempfile.mkdtemp(dir=Path.cwd()))
+        try:
+            test_logger = logging.getLogger("buddy_parallel_test")
+            with patch("buddy_parallel.core.companion_runtime.configure_logging", return_value=test_logger), patch(
+                "buddy_parallel.ingest.hook_server.configure_logging",
+                return_value=test_logger,
+            ):
+                runtime = CompanionRuntime(
+                    config=AppConfig(transport_mode="serial", owner_name="Zhiyun", device_name="Buddy"),
+                    state_store=StateStore(temp_dir / "state.json"),
+                )
             fake_serial = _FakeSerialTransport()
             runtime._serial = fake_serial
 
@@ -64,6 +72,8 @@ class CompanionRuntimeTests(unittest.TestCase):
             self.assertTrue(runtime._serial_bootstrapped)
             self.assertEqual(runtime.device_manager.active_name, "serial")
             self.assertIsNone(runtime.latest_device_status())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

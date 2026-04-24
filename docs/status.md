@@ -2,73 +2,57 @@
 
 ## Current phase
 
-Bootstrap
+- `M5 - End-to-end loop` is effectively operating on the primary USB path.
+- `M7 - VS Code approval bridge` now has a real MVP slice in the repo.
+- `M6 - Packaging and release hygiene` is the main remaining milestone before broader handoff or distribution.
 
 ## Completed
 
-- created clean local checkout from `git@github.com:By-Xin/BuddyParallel.git`
-- confirmed remote repository was empty
-- created initial repository skeleton
-- imported upstream official firmware into `firmware/`
-- created durable architecture / roadmap / status docs
-- created GitHub milestone `M1 - Companion Core`
-- created bootstrap tracking issues:
-  - #1 Epic: bootstrap BuddyParallel companion architecture
-  - #2 Import upstream firmware into firmware/ and keep device behavior stable
-  - #3 Build Python companion shell with config, state, logging, tray, settings, updates
-  - #4 Implement event ingest for Claude hooks and API workflows
-  - #5 Implement canonical state aggregation and permission bridge
-  - #6 Implement device transports and active transport arbitration
-- created Python companion package skeleton and first runtime modules
+- imported the upstream-derived device firmware and kept the firmware heartbeat as the device-side truth
+- built the Python companion shell with config, runtime state, logging, tray UI, settings UI, startup integration, and update checks
+- implemented local ingest for Claude hooks, loopback API events, and host-side permission handling
+- completed the core aggregation loop that turns sessions, approvals, weather, notices, and device telemetry into firmware heartbeats
+- stabilized the primary serial transport with persistent sessions, live device status capture, hardware controls, and approval round-trips on the attached board
+- expanded desktop surfaces beyond placeholders with grouped tray menus, a live dashboard window, and richer settings sections
+- added seasonal themes and richer firmware rendering for special-day idle states
+- added multiple notice-source paths: Telegram baseline, Feishu long-connection bridge, and an experimental MQTT/WSS bridge with shared notice normalization
+- built the first VS Code bridge slice for board approvals plus Codex, workspace, terminal, and diagnostics mirroring
+- expanded regression coverage across config, runtime, aggregator, tray, dashboard, and notice behavior
 
 ## In progress
 
-- flesh out the companion shell from the current scaffolding
-- debug why the live board is not currently surfacing a usable BLE advertising name to the Windows scanner
-- replace placeholder tray/settings surfaces with real desktop UI
+- package the companion into a clean Windows distribution that does not depend on a live developer environment
+- tighten release hygiene, local artifact cleanup, and user-facing documentation
+- decide which non-Telegram notice transport should be treated as the default long-term path
+- finish the BLE story from scaffolded support to a reliable secondary transport
 
 ## Recent progress
 
-- created and pushed the bootstrap baseline commit
-- added a first runnable companion runtime skeleton
-- added event normalization for hook/API events
-- added runtime.json output for local service discovery
-- expanded serial transport into a reusable handshake/status/heartbeat helper
-- added a CLI entrypoint with `run`, `headless`, `status`, and `hooks` modes
-- replaced the hook installer placeholder with a working `~/.claude/settings.json` updater
-- made the repo-local companion launch scripts runnable without pre-installing the package
-- switched the runtime from one-shot serial writes to a persistent serial session with background device reads
-- validated that the runtime now captures device `status` replies into `runtime.json`
-- rewired PermissionRequest handling so the HTTP hook stays pending until a device decision resolves it
-- fixed prompt persistence so `PostToolUse` no longer clears a pending device approval before the board can respond
-- validated the live board-button permission round-trip through the running companion on `COM3`
-- replaced the BLE transport placeholder with an initial NUS client scaffold and status summary path
-- installed `bleak` into the current Windows Python environment for host-side BLE validation
+- added a real dashboard window for live runtime, hardware, and service status
+- added festive idle themes for birthday, Christmas, and New Year rendering
+- added notice-source switching in settings and tray state, with Telegram, Feishu, and MQTT-aware status summaries
+- brought the Feishu bot bridge online through a tray-managed helper and normalized its message handling toward Telegram parity
+- prototyped MQTT/WSS notice delivery, browser-assisted fallback behavior, and local diagnostics for hostile Windows network environments
+- expanded the VS Code extension from approval-only behavior into ambient activity mirroring and workspace monitoring
+- tightened notice dismissal and queue behavior so device acknowledgements and host-side notice rotation stay aligned
 
 ## Latest smoke-test results
 
-- `python -m compileall companion/app` passed after the permission persistence fix
-- `python companion/scripts/run_companion.py status` returned a valid snapshot directly from the checkout
-- `python companion/scripts/run_companion.py headless` opened a persistent session on `COM3`
-- posting a local `/state` event updated the runtime heartbeat and `runtime.json`
-- the runtime captured a valid `{"ack":"status",...}` device reply from the attached board on `COM3`
-- in-process permission smoke tests returned `{"hookSpecificOutput":{"permissionDecision":"allow"}}` for a simulated board `once` response
-- in-process permission smoke tests returned `{"hookSpecificOutput":{"permissionDecision":"deny"}}` for a simulated board `deny` response
-- in-process validation confirmed a pending prompt now survives a same-session `PostToolUse` event and only resolves when a device decision arrives
-- log validation confirmed a live board `{"cmd":"permission","id":"req_1","decision":"once"}` reply resolved a pending `/permission` hook with HTTP 200
-- `python -m buddy_parallel.cli hooks` successfully installed BuddyParallel hooks into `~/.claude/settings.json`
-- serial discovery currently sees `COM3` as the likely attached buddy device
-- `python companion/scripts/run_companion.py status` now reports BLE install/discovery state; current host reports `installed: true`
-- direct `bleak` scanning on this host sees nearby BLE devices, but none currently advertise a visible `Claude-*` or `BuddyParallel` name
+- the primary tray companion and Feishu helper are both able to run together as the expected two-process shape
+- recent real-device Feishu notices were delivered end-to-end and acknowledged by the board without getting stuck in the runtime queue
+- serial runtime snapshots continue to report the attached board on the primary USB path
+- the repo now contains targeted tests for config validation, dashboard modeling, tray menu grouping, runtime notice behavior, and aggregator theme logic
 
 ## Known decisions
 
-- Python-first companion
-- USB + BLE support, but one active writer at a time
-- official firmware kept as device-side truth
-- docs + GitHub issues/milestones are required handoff surfaces
+- Python-first companion remains the source of truth on the host
+- official firmware remains the device-side truth and heartbeat renderer
+- USB remains the primary working transport; BLE stays secondary until it is proven reliable
+- docs and local handoff surfaces must stay in sync with the actual codebase
 
-## Known open questions
+## Recommended next steps
 
-- final Windows BLE library choice for the companion
-- whether first BLE transport milestone will be fully functional or scaffolded behind an interface
+- package the companion into a user-ready Windows app with an isolated runtime
+- clean up stale status/reporting edges, especially around retired MQTT attempts on machines that now use Feishu
+- keep the Feishu path stable while deciding whether MQTT stays experimental or earns another round later
+- continue BLE validation only after packaging and release hygiene stop being the bigger risk

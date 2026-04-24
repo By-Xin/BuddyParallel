@@ -29,6 +29,10 @@ struct TamaState {
   char     weatherSummary[24];
   char     weatherLocation[40];
   uint8_t  weatherCode;
+  char     themeKey[16];
+  char     themeTitle[20];
+  char     themeSubtitle[20];
+  char     themeDetail[20];
 };
 
 // ---------------------------------------------------------------------------
@@ -190,6 +194,24 @@ static void _applyJson(const char* line, TamaState* out) {
       out->weatherCode = 0;
     }
   }
+  if (root.containsKey("theme")) {
+    JsonObject th = root["theme"].as<JsonObject>();
+    if (!th.isNull()) {
+      const char* key = th["key"];
+      const char* title = th["title"];
+      const char* subtitle = th["subtitle"];
+      const char* detail = th["detail"];
+      strncpy(out->themeKey, key ? key : "", sizeof(out->themeKey) - 1); out->themeKey[sizeof(out->themeKey)-1]=0;
+      strncpy(out->themeTitle, title ? title : "", sizeof(out->themeTitle) - 1); out->themeTitle[sizeof(out->themeTitle)-1]=0;
+      strncpy(out->themeSubtitle, subtitle ? subtitle : "", sizeof(out->themeSubtitle) - 1); out->themeSubtitle[sizeof(out->themeSubtitle)-1]=0;
+      strncpy(out->themeDetail, detail ? detail : "", sizeof(out->themeDetail) - 1); out->themeDetail[sizeof(out->themeDetail)-1]=0;
+    } else {
+      out->themeKey[0] = 0;
+      out->themeTitle[0] = 0;
+      out->themeSubtitle[0] = 0;
+      out->themeDetail[0] = 0;
+    }
+  }
   out->lastUpdated = millis();
   _lastLiveMs = millis();
 }
@@ -251,5 +273,9 @@ inline void dataPoll(TamaState* out) {
     out->weatherSummary[0] = 0;
     out->weatherLocation[0] = 0;
     out->weatherCode = 0;
+    out->themeKey[0] = 0;
+    out->themeTitle[0] = 0;
+    out->themeSubtitle[0] = 0;
+    out->themeDetail[0] = 0;
   }
 }

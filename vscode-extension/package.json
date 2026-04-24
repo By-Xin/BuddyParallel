@@ -118,6 +118,27 @@
           "type": "string",
           "default": "Codex",
           "description": "Session title sent to BuddyParallel for Codex presence updates."
+        },
+        "buddyParallel.workspaceMonitoringEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mirror general VS Code focus and editing activity to BuddyParallel."
+        },
+        "buddyParallel.workspaceEditPulseWindowSeconds": {
+          "type": "number",
+          "default": 15,
+          "minimum": 1,
+          "description": "How long BuddyParallel keeps VS Code in an active editing pulse after a local edit."
+        },
+        "buddyParallel.terminalMonitoringEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mirror integrated terminal command start and finish state to BuddyParallel."
+        },
+        "buddyParallel.problemsMonitoringEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mirror VS Code diagnostics pressure (errors and warnings) to BuddyParallel."
         }
       }
     }

@@ -2,17 +2,28 @@ from __future__ import annotations
 
 import argparse
 
-from buddy_parallel.ui.tray_app import BuddyParallelApp
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="buddy-parallel")
-    parser.add_argument("command", nargs="?", default="run", choices=["run", "headless", "status", "hooks"])
+    parser.add_argument(
+        "command",
+        nargs="?",
+        default="run",
+        choices=["run", "headless", "status", "hooks", "feishu-helper"],
+    )
+    parser.add_argument("--api-port", type=int, default=0)
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
+    if args.command == "feishu-helper":
+        from buddy_parallel.services.feishu_helper import main as feishu_helper_main
+
+        raise SystemExit(feishu_helper_main(api_port=args.api_port or None))
+
+    from buddy_parallel.ui.tray_app import BuddyParallelApp
+
     app = BuddyParallelApp(headless=args.command == "headless")
     if args.command in {"run", "headless"}:
         app.run()

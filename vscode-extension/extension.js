@@ -11,6 +11,19 @@ const {
   describeCodexStatus,
   isRecentCodexUpdate,
 } = require("./codex-monitor");
+const {
+  EDIT_ACTIVITY_WINDOW_MS,
+  LONG_RUN_NOTICE_MS,
+  buildProblemsPayload,
+  buildRunCompletionNotice,
+  buildRunPayload,
+  buildWorkspacePresencePayload,
+  describeProblemsStatus,
+  describeRunStatus,
+  describeWorkspaceStatus,
+  summarizeCommandLine,
+  summarizeDiagnostics,
+} = require("./workspace-monitor");
 
 function activate(context) {
   const state = {
@@ -25,6 +38,20 @@ function activate(context) {
     lastCodexError: "",
     lastCodexUpdateAt: 0,
     lastCodexSample: emptyCodexSample(),
+    workspaceInterval: null,
+    workspaceDebounce: null,
+    workspaceSyncInFlight: false,
+    workspaceResyncRequested: false,
+    lastWorkspacePayloadKey: "",
+    lastWorkspaceActivityAt: 0,
+    lastWorkspaceSample: emptyWorkspaceSample(),
+    runsSyncInFlight: false,
+    runsResyncRequested: false,
+    activeRuns: new Map(),
+    lastRunPayloadKey: "",
+    lastProblemsPayloadKey: "",
+    problemsDebounce: null,
+    lastProblemsSummary: emptyProblemsSummary(),
   };
 
   state.statusItem.command = "buddyParallel.requestBoardApproval";
@@ -48,7 +75,7 @@ function activate(context) {
         event: "Notification",
         message: "VS Code: test notice",
         entries: ["BuddyParallel VS Code bridge"],
-        completed: true,
+        completed: false,
       });
       logOutput(state, "Sent BuddyParallel test notice.");
       vscode.window.showInformationMessage("BuddyParallel test notice sent.");
@@ -77,34 +104,59 @@ function activate(context) {
       if (event.document?.uri?.scheme === CODEX_URI_SCHEME) {
         state.lastCodexUpdateAt = Date.now();
         queueCodexSync(state, "doc-update");
+        return;
+      }
+      if (event.contentChanges?.length && isWorkspaceDocument(event.document)) {
+        state.lastWorkspaceActivityAt = Date.now();
+        queueWorkspaceSync(state, "text-edit");
       }
     }),
+    typeof vscode.workspace.onDidChangeNotebookDocument === "function"
+      ? vscode.workspace.onDidChangeNotebookDocument((event) => {
+        if (event.contentChanges?.length || event.cellChanges?.length) {
+          state.lastWorkspaceActivityAt = Date.now();
+          queueWorkspaceSync(state, "notebook-edit");
+        }
+      })
+      : { dispose() {} },
     vscode.window.onDidChangeVisibleTextEditors(() => {
       queueCodexSync(state, "visible-editors");
     }),
     vscode.window.onDidChangeActiveTextEditor(() => {
       queueCodexSync(state, "active-editor");
+      queueWorkspaceSync(state, "active-editor");
     }),
     vscode.window.onDidChangeWindowState(() => {
       queueCodexSync(state, "window-focus");
+      queueWorkspaceSync(state, "window-focus");
     }),
     vscode.window.tabGroups.onDidChangeTabs(() => {
       queueCodexSync(state, "tabs");
     }),
+    vscode.languages.onDidChangeDiagnostics(() => {
+      queueProblemsSync(state, "diagnostics");
+    }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("buddyParallel")) {
         restartCodexMonitoring(state);
+        restartWorkspaceMonitoring(state);
+        queueProblemsSync(state, "config");
+        void syncRunPresence(state);
       }
     }),
+    ...registerTerminalLifecycle(context, state),
     {
       dispose() {
         stopCodexMonitoring(state);
+        stopWorkspaceMonitoring(state);
         state.participant?.dispose?.();
       },
     }
   );
 
   restartCodexMonitoring(state);
+  restartWorkspaceMonitoring(state);
+  queueProblemsSync(state, "activate");
 }
 
 function deactivate() {}
@@ -112,6 +164,7 @@ function deactivate() {}
 async function runManualApproval(state) {
   logOutput(state, "Requesting manual board approval.");
   const allowed = await requestBoardApproval({
+    state,
     toolName: "VS Code action",
     toolInput: { command: "manual test approval" },
     completionLabel: "manual approval",
@@ -135,6 +188,7 @@ async function runApprovedCommentInsert(state) {
   const comment = buildCommentForDocument(document);
   logOutput(state, `Requesting board approval for workspace edit on ${document.uri.fsPath}`);
   const allowed = await requestBoardApproval({
+    state,
     toolName: "Workspace Edit",
     toolInput: { file_path: document.uri.fsPath },
     completionLabel: "workspace edit",
@@ -163,23 +217,40 @@ async function runCodexCommand(state, command, successMessage) {
   vscode.window.showInformationMessage(successMessage);
 }
 
-async function requestBoardApproval({ toolName, toolInput, completionLabel }) {
+async function requestBoardApproval({ state, toolName, toolInput, completionLabel }) {
+  const requestId = buildRequestId();
+  const startedAt = Date.now();
   let decision;
   try {
+    logOutput(
+      state,
+      `Board approval request issued request_id=${requestId} tool=${toolName}`
+    );
     const response = await postJson("/vscode/permission", {
+      request_id: requestId,
       session_id: getSessionInfo().id,
       tool_name: toolName,
       tool_input: toolInput,
       timeout_seconds: getConfiguration().get("requestTimeoutSeconds", 590),
     });
     decision = String(response.decision || "ask");
+    const elapsedMs = Date.now() - startedAt;
+    logOutput(
+      state,
+      `Board approval response request_id=${requestId} decision=${decision} elapsed_ms=${elapsedMs}`
+    );
   } catch (error) {
     await sendBuddyEvent({
       event: "Notification",
       message: "VS Code: approval failed",
       entries: [String(error.message || error)],
-      completed: true,
+      completed: false,
     });
+    const elapsedMs = Date.now() - startedAt;
+    logOutput(
+      state,
+      `Board approval request failed request_id=${requestId} elapsed_ms=${elapsedMs} error=${String(error.message || error)}`
+    );
     throw error;
   }
 
@@ -187,7 +258,7 @@ async function requestBoardApproval({ toolName, toolInput, completionLabel }) {
     event: "Notification",
     message: decision === "allow" ? `VS Code: approved ${completionLabel}` : `VS Code: denied ${completionLabel}`,
     entries: [toolName],
-    completed: true,
+    completed: false,
   });
   await sendBuddyEvent({
     event: "Stop",
@@ -196,6 +267,7 @@ async function requestBoardApproval({ toolName, toolInput, completionLabel }) {
     running: false,
     completed: false,
   });
+  queueWorkspaceSync(state);
 
   return decision === "allow";
 }
@@ -267,6 +339,7 @@ function createChatHandler(state) {
     if (request.command === "board" || /approval|approve|board/i.test(promptText)) {
       stream.progress("Requesting board approval...");
       const allowed = await requestBoardApproval({
+        state,
         toolName: "VS Code chat request",
         toolInput: { prompt: promptText || "board approval test" },
         completionLabel: "chat approval",
@@ -342,6 +415,223 @@ function queueCodexSync(state) {
     state.codexDebounce = null;
     void syncCodexPresence(state);
   }, 80);
+}
+
+function restartWorkspaceMonitoring(state) {
+  stopWorkspaceMonitoring(state);
+  logOutput(state, "Restarting workspace monitoring.");
+
+  if (!getConfiguration().get("workspaceMonitoringEnabled", true)) {
+    void clearWorkspacePresence(state);
+    return;
+  }
+
+  state.workspaceInterval = setInterval(() => {
+    void syncWorkspacePresence(state);
+  }, 3000);
+
+  queueWorkspaceSync(state);
+}
+
+function stopWorkspaceMonitoring(state) {
+  if (state.workspaceInterval) {
+    clearInterval(state.workspaceInterval);
+    state.workspaceInterval = null;
+  }
+  if (state.workspaceDebounce) {
+    clearTimeout(state.workspaceDebounce);
+    state.workspaceDebounce = null;
+  }
+  if (state.problemsDebounce) {
+    clearTimeout(state.problemsDebounce);
+    state.problemsDebounce = null;
+  }
+}
+
+function queueWorkspaceSync(state) {
+  if (state.workspaceDebounce) {
+    clearTimeout(state.workspaceDebounce);
+  }
+  state.workspaceDebounce = setTimeout(() => {
+    state.workspaceDebounce = null;
+    void syncWorkspacePresence(state);
+  }, 80);
+}
+
+async function syncWorkspacePresence(state) {
+  if (state.workspaceSyncInFlight) {
+    state.workspaceResyncRequested = true;
+    return;
+  }
+  state.workspaceSyncInFlight = true;
+
+  try {
+    const sample = collectWorkspaceSample(state);
+    state.lastWorkspaceSample = sample;
+    updateStatusItem(state);
+    const payload = buildWorkspacePresencePayload(sample, getSessionInfo());
+    const payloadKey = JSON.stringify(payload);
+    if (payloadKey !== state.lastWorkspacePayloadKey) {
+      await sendBuddyEvent(payload);
+      state.lastWorkspacePayloadKey = payloadKey;
+      logOutput(state, `Synced workspace status: ${describeWorkspaceStatus(sample)}`);
+    }
+  } catch (error) {
+    logOutput(state, `Workspace sync failed: ${String(error.message || error)}`);
+  } finally {
+    state.workspaceSyncInFlight = false;
+    if (state.workspaceResyncRequested) {
+      state.workspaceResyncRequested = false;
+      void syncWorkspacePresence(state);
+    }
+  }
+}
+
+async function clearWorkspacePresence(state) {
+  const payload = {
+    session_id: getSessionInfo().id,
+    session_title: getSessionInfo().title,
+    state: "idle",
+    clear_session: true,
+    running: false,
+    waiting: false,
+    completed: false,
+    message: "VS Code: idle",
+  };
+  const payloadKey = JSON.stringify(payload);
+  if (payloadKey === state.lastWorkspacePayloadKey) {
+    return;
+  }
+  await sendBuddyEvent(payload);
+  state.lastWorkspacePayloadKey = payloadKey;
+  state.lastWorkspaceSample = emptyWorkspaceSample();
+  updateStatusItem(state);
+}
+
+function queueProblemsSync(state) {
+  if (state.problemsDebounce) {
+    clearTimeout(state.problemsDebounce);
+  }
+  state.problemsDebounce = setTimeout(() => {
+    state.problemsDebounce = null;
+    void syncProblemsPresence(state);
+  }, 120);
+}
+
+async function syncProblemsPresence(state) {
+  if (!getConfiguration().get("problemsMonitoringEnabled", true)) {
+    await clearProblemsPresence(state);
+    return;
+  }
+  const summary = summarizeDiagnostics(vscode.languages.getDiagnostics());
+  state.lastProblemsSummary = summary;
+  updateStatusItem(state);
+  const payload = buildProblemsPayload(summary, getSessionInfo());
+  const payloadKey = JSON.stringify(payload);
+  if (payloadKey === state.lastProblemsPayloadKey) {
+    return;
+  }
+  await sendBuddyEvent(payload);
+  state.lastProblemsPayloadKey = payloadKey;
+  logOutput(state, `Synced problem status: ${describeProblemsStatus(summary)}`);
+}
+
+async function clearProblemsPresence(state) {
+  const payload = buildProblemsPayload(emptyProblemsSummary(), getSessionInfo());
+  const payloadKey = JSON.stringify(payload);
+  if (payloadKey === state.lastProblemsPayloadKey) {
+    return;
+  }
+  await sendBuddyEvent(payload);
+  state.lastProblemsPayloadKey = payloadKey;
+  state.lastProblemsSummary = emptyProblemsSummary();
+  updateStatusItem(state);
+}
+
+function registerTerminalLifecycle(context, state) {
+  if (typeof vscode.window.onDidStartTerminalShellExecution !== "function" ||
+      typeof vscode.window.onDidEndTerminalShellExecution !== "function") {
+    logOutput(state, "Terminal shell integration events are unavailable in this VS Code build.");
+    return [];
+  }
+
+  return [
+    vscode.window.onDidStartTerminalShellExecution((event) => {
+      state.activeRuns.set(event.terminal, {
+        terminalName: event.terminal?.name || "Terminal",
+        commandLabel: summarizeCommandLine(resolveCommandLine(event.execution)),
+        startedAt: Date.now(),
+      });
+      void syncRunPresence(state);
+    }),
+    vscode.window.onDidEndTerminalShellExecution((event) => {
+      const run = state.activeRuns.get(event.terminal) || {
+        terminalName: event.terminal?.name || "Terminal",
+        commandLabel: summarizeCommandLine(resolveCommandLine(event.execution)),
+        startedAt: Date.now(),
+      };
+      state.activeRuns.delete(event.terminal);
+      void handleRunFinished(state, run, event.exitCode);
+    }),
+  ];
+}
+
+async function handleRunFinished(state, run, exitCode) {
+  const durationMs = Math.max(0, Date.now() - Number(run.startedAt || Date.now()));
+  if (
+    getConfiguration().get("terminalMonitoringEnabled", true) &&
+    (exitCode !== 0 || durationMs >= LONG_RUN_NOTICE_MS)
+  ) {
+    await sendBuddyEvent(buildRunCompletionNotice({
+      commandLabel: run.commandLabel,
+      exitCode,
+      durationMs,
+    }));
+  }
+  await syncRunPresence(state);
+}
+
+async function syncRunPresence(state) {
+  if (state.runsSyncInFlight) {
+    state.runsResyncRequested = true;
+    return;
+  }
+  state.runsSyncInFlight = true;
+
+  try {
+    if (!getConfiguration().get("terminalMonitoringEnabled", true)) {
+      await clearRunPresence(state);
+      return;
+    }
+    const activeRuns = [...state.activeRuns.values()];
+    updateStatusItem(state);
+    const payload = buildRunPayload(activeRuns, getSessionInfo());
+    const payloadKey = JSON.stringify(payload);
+    if (payloadKey !== state.lastRunPayloadKey) {
+      await sendBuddyEvent(payload);
+      state.lastRunPayloadKey = payloadKey;
+      logOutput(state, `Synced run status: ${describeRunStatus(activeRuns)}`);
+    }
+  } catch (error) {
+    logOutput(state, `Run sync failed: ${String(error.message || error)}`);
+  } finally {
+    state.runsSyncInFlight = false;
+    if (state.runsResyncRequested) {
+      state.runsResyncRequested = false;
+      void syncRunPresence(state);
+    }
+  }
+}
+
+async function clearRunPresence(state) {
+  const payload = buildRunPayload([], getSessionInfo());
+  const payloadKey = JSON.stringify(payload);
+  if (payloadKey === state.lastRunPayloadKey) {
+    return;
+  }
+  await sendBuddyEvent(payload);
+  state.lastRunPayloadKey = payloadKey;
+  updateStatusItem(state);
 }
 
 async function syncCodexPresence(state) {
@@ -490,19 +780,79 @@ function emptyCodexSample(state = null) {
   };
 }
 
-function updateStatusItem(state) {
-  const monitoringEnabled = getConfiguration().get("codexMonitoringEnabled", true);
-  if (!monitoringEnabled) {
-    state.statusItem.text = "$(device-camera-video) BuddyParallel";
-    state.statusItem.tooltip = "BuddyParallel hardware approval bridge\nCodex monitoring: off";
-    return;
-  }
+function emptyWorkspaceSample() {
+  return {
+    windowFocused: Boolean(vscode.window.state?.focused),
+    recentlyEdited: false,
+    activeLabel: "",
+  };
+}
 
+function emptyProblemsSummary() {
+  return {
+    errors: 0,
+    warnings: 0,
+    informations: 0,
+    hints: 0,
+  };
+}
+
+function collectWorkspaceSample(state) {
+  const activeEditor = vscode.window.activeTextEditor;
+  const activeDocument = activeEditor?.document;
+  const activeNotebook = vscode.window.activeNotebookEditor?.notebook;
+  const pulseWindowMs = Math.max(
+    1000,
+    Number(getConfiguration().get("workspaceEditPulseWindowSeconds", EDIT_ACTIVITY_WINDOW_MS / 1000)) * 1000
+  );
+  const activeLabel = activeDocument && isWorkspaceDocument(activeDocument)
+    ? basename(activeDocument.uri.fsPath || activeDocument.uri.path || activeDocument.uri.toString())
+    : activeNotebook
+      ? basename(activeNotebook.uri.fsPath || activeNotebook.uri.path || activeNotebook.uri.toString())
+      : "";
+  return {
+    windowFocused: Boolean(vscode.window.state?.focused),
+    recentlyEdited: (Date.now() - state.lastWorkspaceActivityAt) <= pulseWindowMs,
+    activeLabel,
+  };
+}
+
+function isWorkspaceDocument(document) {
+  const scheme = document?.uri?.scheme;
+  return Boolean(document) && scheme !== CODEX_URI_SCHEME && scheme !== "output";
+}
+
+function resolveCommandLine(execution) {
+  if (!execution) {
+    return "";
+  }
+  if (typeof execution.commandLine === "string") {
+    return execution.commandLine;
+  }
+  if (execution.commandLine && typeof execution.commandLine.value === "string") {
+    return execution.commandLine.value;
+  }
+  return "";
+}
+
+function updateStatusItem(state) {
+  const codexMonitoringEnabled = getConfiguration().get("codexMonitoringEnabled", true);
   const sample = state.lastCodexSample || emptyCodexSample(state);
+  const workspace = state.lastWorkspaceSample || emptyWorkspaceSample();
+  const problems = state.lastProblemsSummary || emptyProblemsSummary();
+  const activeRuns = [...state.activeRuns.values()];
   const codexBadge = sample.hasTask ? ` Codex ${sample.taskCount}` : "";
   const prefix = state.lastCodexError ? "$(warning)" : "$(device-camera-video)";
-  state.statusItem.text = `${prefix} BuddyParallel${codexBadge}`;
-  state.statusItem.tooltip = `BuddyParallel hardware approval bridge\n${describeCodexStatus(sample, state.lastCodexError)}`;
+  state.statusItem.text = `${prefix} BuddyParallel${codexMonitoringEnabled ? codexBadge : ""}`;
+  state.statusItem.tooltip = [
+    "BuddyParallel hardware approval bridge",
+    `Workspace: ${describeWorkspaceStatus(workspace)}`,
+    `Run: ${describeRunStatus(activeRuns)}`,
+    `Problems: ${describeProblemsStatus(problems)}`,
+    codexMonitoringEnabled
+      ? `Codex: ${describeCodexStatus(sample, state.lastCodexError)}`
+      : "Codex monitoring: off",
+  ].join("\n");
 }
 
 function showCodexMonitorStatus(state) {
@@ -518,6 +868,9 @@ function showCodexMonitorStatus(state) {
 
 function renderStatusMarkdown(state) {
   const sample = state.lastCodexSample || emptyCodexSample(state);
+  const workspace = state.lastWorkspaceSample || emptyWorkspaceSample();
+  const problems = state.lastProblemsSummary || emptyProblemsSummary();
+  const activeRuns = [...state.activeRuns.values()];
   const session = getSessionInfo();
   const lines = [
     `**BuddyParallel**`,
@@ -532,6 +885,9 @@ function renderStatusMarkdown(state) {
     `- Recent Codex document update: ${sample.recentlyUpdated ? "yes" : "no"}`,
     `- VS Code window focused: ${sample.windowFocused ? "yes" : "no"}`,
     `- Monitor summary: ${describeCodexStatus(sample, state.lastCodexError)}`,
+    `- Workspace summary: ${describeWorkspaceStatus(workspace)}`,
+    `- Run summary: ${describeRunStatus(activeRuns)}`,
+    `- Problems summary: ${describeProblemsStatus(problems)}`,
   ];
   if (state.lastCodexPayloadKey) {
     lines.push(`- Last payload synced: yes`);
@@ -619,6 +975,10 @@ function normalizeBaseUrl(value) {
 function basename(filePath) {
   const parts = String(filePath || "").split(/[\\/]/);
   return parts[parts.length - 1] || filePath;
+}
+
+function buildRequestId() {
+  return `vscode-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
 function buildCommentForDocument(document) {

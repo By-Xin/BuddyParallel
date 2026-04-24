@@ -17,6 +17,13 @@ Default companion URL:
 
 - `http://127.0.0.1:43112`
 
+Current ambient mirrors:
+
+- Codex task presence / focus / recent update pulse
+- VS Code focus / idle / recent edit pulse
+- Integrated terminal run / busy / finished
+- Problems pressure from current diagnostics
+
 ## Local dev
 
 1. Make sure the BuddyParallel tray companion is already running.

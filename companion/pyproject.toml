@@ -9,7 +9,10 @@ description = "Python-first companion for BuddyParallel"
 readme = "../README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "lark-oapi>=1.5,<2",
   "packaging>=24,<26",
+  "paho-mqtt>=1.6,<3",
+  "PySocks>=1.7,<2",
   "requests>=2.32,<3",
 ]
 

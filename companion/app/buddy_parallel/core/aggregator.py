@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from time import time
 
+from buddy_parallel.core.seasonal_themes import resolve_seasonal_theme
+from buddy_parallel.runtime.config import AppConfig
 from buddy_parallel.core.session_registry import SessionSnapshot
+
+MAX_NOTICE_ID_CHARS = 39
 
 
 @dataclass
@@ -26,7 +31,8 @@ class TransientEntry:
 
 
 class StateAggregator:
-    def __init__(self) -> None:
+    def __init__(self, config: AppConfig | None = None) -> None:
+        self.config = config or AppConfig()
         self.sessions: dict[str, SessionSnapshot] = {}
         self.pending_prompt: PendingPrompt | None = None
         self.transient_entries: list[TransientEntry] = []
@@ -89,7 +95,7 @@ class StateAggregator:
                 message=message,
                 entries=line_items,
                 expires_at=expires_at,
-                notice_id=str(notice_id or "")[:40],
+                notice_id=str(notice_id or "")[:MAX_NOTICE_ID_CHARS],
                 notice_from=str(notice_from or "")[:16],
                 notice_body=str(notice_body or "")[:160],
                 notice_stamp=str(notice_stamp or "")[:24],
@@ -133,7 +139,7 @@ class StateAggregator:
             "updated_at": float(payload.get("updated_at") or 0.0),
         }
 
-    def build_heartbeat(self) -> dict:
+    def build_heartbeat(self, today: date | None = None) -> dict:
         self._prune_transients()
         sessions = sorted(self.sessions.values(), key=lambda item: item.updated_at, reverse=True)
         running = sum(1 for session in sessions if session.running)
@@ -144,12 +150,13 @@ class StateAggregator:
         prominent_notice: TransientEntry | None = None
         notice_total = 0
         for transient in self.transient_entries:
+            display_message = self._display_message(transient)
             if transient.notice_body or transient.notice_from or transient.notice_stamp:
                 notice_total += 1
                 if prominent_notice is None:
                     prominent_notice = transient
-            if len(entries) < 8 and transient.message and transient.message not in entries:
-                entries.append(transient.message)
+            if len(entries) < 8 and display_message and display_message not in entries:
+                entries.append(display_message)
             for line in transient.entries:
                 if len(entries) >= 8:
                     break
@@ -177,6 +184,7 @@ class StateAggregator:
             "prompt": None,
             "notice": None,
             "weather": None,
+            "theme": None,
         }
         if self.pending_prompt:
             heartbeat["prompt"] = {
@@ -195,6 +203,14 @@ class StateAggregator:
             }
         if self.weather is not None and self.weather.get("board_summary"):
             heartbeat["weather"] = self.weather
+        theme = resolve_seasonal_theme(self.config, today=today)
+        if theme is not None:
+            heartbeat["theme"] = {
+                "key": theme.key,
+                "title": theme.title,
+                "subtitle": theme.subtitle,
+                "detail": theme.detail,
+            }
         return heartbeat
 
     def _prune_transients(self) -> None:
@@ -204,3 +220,16 @@ class StateAggregator:
             for entry in self.transient_entries
             if (entry.notice_body or entry.notice_from or entry.notice_stamp) or entry.expires_at > now
         ]
+
+    @staticmethod
+    def _display_message(entry: TransientEntry) -> str:
+        message = str(entry.message or "")
+        body = str(entry.notice_body or "")
+        if body:
+            if message == body:
+                return body
+            if message == f"Message: {body}":
+                return body
+            if message.endswith(f": {body}") and message.startswith("Message "):
+                return body
+        return message

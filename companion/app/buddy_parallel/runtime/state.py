@@ -27,6 +27,14 @@ class RuntimeState:
     last_telegram_error: str = ""
     last_telegram_message_summary: str = "idle"
     last_telegram_delivery_at: float = 0.0
+    feishu_connected: bool = False
+    last_feishu_error: str = ""
+    last_feishu_message_summary: str = "idle"
+    last_feishu_delivery_at: float = 0.0
+    mqtt_connected: bool = False
+    last_mqtt_error: str = ""
+    last_mqtt_message_summary: str = "idle"
+    last_mqtt_delivery_at: float = 0.0
 
 
 class StateStore:

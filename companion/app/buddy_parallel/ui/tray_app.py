@@ -26,6 +26,8 @@ from buddy_parallel.runtime.config import APP_DIR, CONFIG_PATH, LOG_PATH, AppCon
 from buddy_parallel.runtime.logging_utils import configure_logging
 from buddy_parallel.runtime.runtime_config import read_runtime_config
 from buddy_parallel.runtime.state import StateStore
+from buddy_parallel.services.feishu_bridge import FeishuBridge
+from buddy_parallel.services.mqtt_notice_bridge import MqttNoticeBridge
 from buddy_parallel.services.startup import StartupManager
 from buddy_parallel.services.telegram_bridge import TelegramBridge
 from buddy_parallel.services.updates import UpdateChecker
@@ -41,12 +43,15 @@ class BuddyParallelApp:
         self.state_store = StateStore()
         self.update_checker = UpdateChecker()
         self.startup_manager = StartupManager()
-        self.telegram_bridge = TelegramBridge(self._load_config, self._post_telegram_message, self.logger, self.state_store)
+        self.telegram_bridge = TelegramBridge(self._load_config, self._post_notice_message, self.logger, self.state_store)
+        self.feishu_bridge = FeishuBridge(self._load_config, self.logger, self.state_store)
+        self.mqtt_notice_bridge = MqttNoticeBridge(self._load_config, self._post_notice_message, self.logger, self.state_store)
         self.weather_bridge = WeatherBridge(self._load_config, self._apply_weather_snapshot, self.logger, self.state_store)
         self._runtime: CompanionRuntime | None = None
         self._current_config: AppConfig | None = None
         self._runtime_lock = threading.RLock()
         self._stopping = False
+        self._dashboard_process: subprocess.Popen | None = None
         self._settings_process: subprocess.Popen | None = None
         self._watcher: threading.Thread | None = None
         self._config_mtime = 0.0
@@ -86,13 +91,13 @@ class BuddyParallelApp:
             print("BuddyParallel companion running in headless mode.")
             self._start_runtime(config)
             self.weather_bridge.start()
-            self.telegram_bridge.start()
+            self._sync_notice_bridge(config)
             self._run_headless_loop()
             return
 
         self._start_runtime(config)
         self.weather_bridge.start()
-        self.telegram_bridge.start()
+        self._sync_notice_bridge(config)
         self._watcher = threading.Thread(target=self._watch_config_loop, name="bp-config-watcher", daemon=True)
         self._watcher.start()
         self._refresh_menu()
@@ -100,6 +105,7 @@ class BuddyParallelApp:
         self._icon.run()
 
     def snapshot(self) -> dict:
+        config = self.config_store.load()
         runtime = read_runtime_config()
         state = self.state_store.load()
         return {
@@ -114,10 +120,17 @@ class BuddyParallelApp:
                 "last_weather_error": state.last_weather_error,
                 "last_weather_summary": state.last_weather_summary,
                 "last_weather_update_at": state.last_weather_update_at,
+                "notice_transport": config.notice_transport,
                 "telegram_offset": state.telegram_offset,
                 "last_telegram_error": state.last_telegram_error,
                 "last_telegram_message_summary": state.last_telegram_message_summary,
                 "last_telegram_delivery_at": state.last_telegram_delivery_at,
+                "last_feishu_error": state.last_feishu_error,
+                "last_feishu_message_summary": state.last_feishu_message_summary,
+                "last_feishu_delivery_at": state.last_feishu_delivery_at,
+                "last_mqtt_error": state.last_mqtt_error,
+                "last_mqtt_message_summary": state.last_mqtt_message_summary,
+                "last_mqtt_delivery_at": state.last_mqtt_delivery_at,
             },
         }
 
@@ -128,6 +141,8 @@ class BuddyParallelApp:
         self._stopping = True
         self.weather_bridge.stop()
         self.telegram_bridge.stop()
+        self.feishu_bridge.stop()
+        self.mqtt_notice_bridge.stop()
         self._stop_runtime()
         if self._icon is not None:
             self._icon.stop()
@@ -143,27 +158,13 @@ class BuddyParallelApp:
     def _build_menu(self):
         assert self._pystray is not None
         assert self._Item is not None
-        hardware_menu = self._build_hardware_menu()
-        port_menu = self._build_port_menu()
-        files_menu = self._pystray.Menu(
-            self._Item("Open Config File", self._open_config_file),
-            self._Item("Open Log File", self._open_log_file),
-            self._Item("Open Runtime File", self._open_runtime_file),
-        )
         return self._pystray.Menu(
             self._Item(lambda item: self._status_label(), None, enabled=False),
-            self._Item(lambda item: self._detail_label(), None, enabled=False),
-            self._Item(lambda item: self._weather_label(), None, enabled=False),
-            self._Item(lambda item: self._telegram_label(), None, enabled=False),
             self._Item(lambda item: self._hardware_label(), None, enabled=False),
-            self._Item(lambda item: self._hardware_controls_label(), None, enabled=False),
-            self._Item("Hardware Controls", hardware_menu),
-            self._Item("Serial Port", port_menu),
-            self._Item("Open Settings", self._open_settings),
-            self._Item("Install Hooks", self._install_hooks),
-            self._Item("Logs & Files", files_menu),
-            self._Item("Check Updates", self._check_updates),
-            self._Item(f"Version {__version__}", None, enabled=False),
+            self._Item("Open BuddyParallel", self._open_dashboard),
+            self._Item("Overview", self._build_overview_menu()),
+            self._Item("Hardware", self._build_hardware_menu()),
+            self._Item("Settings & Tools", self._build_system_menu()),
             self._Item("Quit", self._quit),
         )
 
@@ -182,9 +183,21 @@ class BuddyParallelApp:
         msg = str(heartbeat.get("msg") or "No Claude connected") if isinstance(heartbeat, dict) else "No Claude connected"
         return msg[:64]
 
-    def _telegram_label(self) -> str:
+    def _notice_label(self) -> str:
+        config = self.config_store.load()
+        if config.notice_transport == "mqtt":
+            status = self.mqtt_notice_bridge.status()
+            prefix = "Notice MQTT OK" if status.mqtt_ok else "Notice MQTT idle"
+            detail = status.last_error or status.last_message_summary
+            return f"{prefix} | {detail[:48]}"
+        if config.notice_transport == "feishu":
+            status = self.feishu_bridge.status()
+            prefix = "Notice Feishu OK" if status.feishu_ok else "Notice Feishu idle"
+            detail = status.last_error or status.last_message_summary
+            return f"{prefix} | {detail[:48]}"
+
         status = self.telegram_bridge.status()
-        prefix = "Telegram OK" if status.telegram_ok else "Telegram idle"
+        prefix = "Notice Telegram OK" if status.telegram_ok else "Notice Telegram idle"
         detail = status.last_error or status.last_message_summary
         return f"{prefix} | {detail[:48]}"
 
@@ -226,6 +239,7 @@ class BuddyParallelApp:
             self._Item("Refresh Status", self._refresh_device_status),
             self._Item(lambda item: self._hardware_device_line(), None, enabled=False),
             self._Item(lambda item: self._hardware_battery_line(), None, enabled=False),
+            self._Item(lambda item: self._hardware_controls_label(), None, enabled=False),
             self._Item("Brightness", self._build_brightness_menu(), enabled=lambda item: self._device_available()),
             self._Item(
                 "LED Enabled",
@@ -240,6 +254,39 @@ class BuddyParallelApp:
                 checked=lambda item: self._hardware_snapshot().sound_enabled is True,
             ),
             self._Item("Pet", self._build_pet_menu(), enabled=lambda item: self._device_available()),
+            self._Item("Serial Port", self._build_port_menu()),
+        )
+
+    def _build_overview_menu(self):
+        assert self._pystray is not None
+        assert self._Item is not None
+        return self._pystray.Menu(
+            self._Item(lambda item: self._detail_label(), None, enabled=False),
+            self._Item(lambda item: self._weather_label(), None, enabled=False),
+            self._Item(lambda item: self._notice_label(), None, enabled=False),
+            self._Item(lambda item: self._hardware_controls_label(), None, enabled=False),
+            self._Item(lambda item: self._hardware_device_line(), None, enabled=False),
+            self._Item(lambda item: self._hardware_battery_line(), None, enabled=False),
+        )
+
+    def _build_system_menu(self):
+        assert self._pystray is not None
+        assert self._Item is not None
+        return self._pystray.Menu(
+            self._Item("Open Settings", self._open_settings),
+            self._Item("Install Hooks", self._install_hooks),
+            self._Item("Logs & Files", self._build_files_menu()),
+            self._Item("Check Updates", self._check_updates),
+            self._Item(f"Version {__version__}", None, enabled=False),
+        )
+
+    def _build_files_menu(self):
+        assert self._pystray is not None
+        assert self._Item is not None
+        return self._pystray.Menu(
+            self._Item("Open Config File", self._open_config_file),
+            self._Item("Open Log File", self._open_log_file),
+            self._Item("Open Runtime File", self._open_runtime_file),
         )
 
     def _build_brightness_menu(self):
@@ -461,11 +508,11 @@ class BuddyParallelApp:
         self._refresh_menu()
         return result
 
+    def _open_dashboard(self, icon=None, item=None) -> None:
+        self._dashboard_process = self._launch_ui_script(self._dashboard_process, "run_dashboard.py")
+
     def _open_settings(self, icon=None, item=None) -> None:
-        if self._settings_process and self._settings_process.poll() is None:
-            return
-        script = Path(__file__).resolve().parents[3] / "scripts" / "run_settings.py"
-        self._settings_process = subprocess.Popen([sys.executable, str(script)])
+        self._settings_process = self._launch_ui_script(self._settings_process, "run_settings.py")
 
     def _install_hooks(self, icon=None, item=None) -> None:
         try:
@@ -526,19 +573,21 @@ class BuddyParallelApp:
         old_config = self._current_config
         self._current_config = new_config
         auto_start_changed = old_config is not None and old_config.auto_start != new_config.auto_start
+        notice_changed = old_config is None or self._requires_notice_bridge_reload(old_config, new_config)
         self._sync_startup(new_config, notify=auto_start_changed)
         if old_config is None or self._requires_runtime_restart(old_config, new_config):
             self.logger.info("Config changed; restarting runtime")
             self._stop_runtime()
             self._start_runtime(new_config)
             self.weather_bridge.request_reload()
-            self.telegram_bridge.request_reload()
+            self._sync_notice_bridge(new_config)
             self._notify("BuddyParallel runtime configuration reloaded.")
             self._refresh_menu()
             return
         self.logger.info("Config changed; updating non-runtime services only")
         self.weather_bridge.request_reload()
-        self.telegram_bridge.request_reload()
+        if notice_changed:
+            self._sync_notice_bridge(new_config)
         self._notify("BuddyParallel settings updated.")
         self._refresh_menu()
 
@@ -574,10 +623,35 @@ class BuddyParallelApp:
                 "api_server_port",
                 "owner_name",
                 "device_name",
+                "festive_themes_enabled",
+                "birthday_mmdd",
+                "birthday_name",
             )
         )
 
-    def _post_telegram_message(
+    @staticmethod
+    def _requires_notice_bridge_reload(old: AppConfig, new: AppConfig) -> bool:
+        return any(
+            getattr(old, key) != getattr(new, key)
+            for key in (
+                "notice_transport",
+                "bot_token",
+                "allowed_chat_id",
+                "poll_interval_seconds",
+                "feishu_app_id",
+                "feishu_app_secret",
+                "feishu_allowed_chat_id",
+                "notice_mqtt_url",
+                "notice_mqtt_topic",
+                "notice_mqtt_username",
+                "notice_mqtt_password",
+                "notice_mqtt_client_id",
+                "notice_mqtt_keepalive_seconds",
+                "api_server_port",
+            )
+        )
+
+    def _post_notice_message(
         self,
         message: str,
         entries: list[str] | None,
@@ -601,6 +675,24 @@ class BuddyParallelApp:
             notice_stamp=notice_stamp,
         )
         self._refresh_menu()
+
+    def _sync_notice_bridge(self, config: AppConfig) -> None:
+        if config.notice_transport == "mqtt":
+            self.feishu_bridge.stop()
+            self.telegram_bridge.stop()
+            self.mqtt_notice_bridge.request_reload()
+            self.mqtt_notice_bridge.start()
+            return
+        if config.notice_transport == "feishu":
+            self.mqtt_notice_bridge.stop()
+            self.telegram_bridge.stop()
+            self.feishu_bridge.request_reload()
+            self.feishu_bridge.start()
+            return
+        self.feishu_bridge.stop()
+        self.mqtt_notice_bridge.stop()
+        self.telegram_bridge.request_reload()
+        self.telegram_bridge.start()
 
     def _apply_weather_snapshot(self, payload: dict | None) -> None:
         with self._runtime_lock:
@@ -634,6 +726,13 @@ class BuddyParallelApp:
         repo_root = companion_dir.parent
         script = companion_dir / "scripts" / "run_companion.py"
         return script, ["run"], repo_root
+
+    @staticmethod
+    def _launch_ui_script(process: subprocess.Popen | None, script_name: str) -> subprocess.Popen | None:
+        if process and process.poll() is None:
+            return process
+        script = Path(__file__).resolve().parents[3] / "scripts" / script_name
+        return subprocess.Popen([sys.executable, str(script)])
 
     @staticmethod
     def _open_path(path: Path) -> None:

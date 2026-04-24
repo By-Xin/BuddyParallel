@@ -1,13 +1,13 @@
 # Roadmap
 
-## M0 — Bootstrap
+## M0 - Bootstrap
 
 - initialize empty BuddyParallel repo
 - import upstream firmware into `firmware/`
 - create Python companion package skeleton
 - create durable docs and GitHub tracking issues
 
-## M1 — Companion shell
+## M1 - Companion shell
 
 - config persistence
 - runtime state persistence
@@ -17,7 +17,7 @@
 - startup integration
 - update checker skeleton
 
-## M2 — Event ingest
+## M2 - Event ingest
 
 - local hook relay CLI
 - loopback HTTP server
@@ -25,30 +25,37 @@
 - API ingest endpoint for API workflows
 - canonical event schema
 
-## M3 — Aggregation and permissions
+## M3 - Aggregation and permissions
 
 - session registry
 - heartbeat builder
 - pending permission lifecycle
 - device-to-host approval resolution
 
-## M4 — Device transports
+## M4 - Device transports
 
 - serial transport
 - BLE transport
 - active transport arbitration
 - reconnect and failover behavior
 
-## M5 — End-to-end loop
+## M5 - End-to-end loop
 
 - hook events update device state
 - API events update device state
 - device approve/deny resolves host permissions
 - status reporting visible in tray and logs
 
-## M6 — Packaging and release hygiene
+## M6 - Packaging and release hygiene
 
 - Windows entrypoints
 - packaging skeleton
 - release/update docs
 - keep docs and GitHub tracking in sync
+
+## M7 - VS Code approval bridge
+
+- extension shell for local BuddyParallel integration
+- board approval flow from VS Code into the hardware prompt path
+- Codex presence mirroring
+- workspace, terminal, and diagnostics ambient activity mirroring

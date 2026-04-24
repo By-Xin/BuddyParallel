@@ -379,6 +379,7 @@ static uint8_t clockDow() { return _clkDt.WeekDay % 7; }
 PersonaState derive(const TamaState& s) {
   if (!s.connected)            return P_IDLE;
   if (s.sessionsWaiting > 0)   return P_ATTENTION;
+  if (s.themeKey[0] && s.sessionsRunning == 0) return P_CELEBRATE;
   if (s.recentlyCompleted)     return P_CELEBRATE;
   if (s.sessionsRunning >= 3)  return P_BUSY;
   return P_IDLE;   // connected, 0+ sessions, nothing urgent — hang out
@@ -718,6 +719,8 @@ static void drawNoticeCard() {
 }
 
 static uint16_t weatherAccent(uint8_t code, const Palette& p);
+static bool showSeasonalCard();
+static void drawSeasonalCard();
 static int clockCardTop(bool hasWeather);
 
 static void drawClockCard() {
@@ -781,6 +784,97 @@ static uint16_t weatherAccent(uint8_t code, const Palette& p) {
   if (code >= 71 && code <= 86) return 0xB7FF;
   if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 0x5D9B;
   return p.body;
+}
+
+static uint16_t seasonalAccent(const Palette& p) {
+  if (strcmp(tama.themeKey, "birthday") == 0) return HOT;
+  if (strcmp(tama.themeKey, "christmas") == 0) return GREEN;
+  if (strcmp(tama.themeKey, "new-year") == 0) return 0x07FF;
+  return p.body;
+}
+
+static void drawBirthdayOrnaments(int cardX, int cardY, int cardW, int cardH, uint16_t accent) {
+  spr.fillCircle(cardX + 16, cardY + 14, 3, accent);
+  spr.fillCircle(cardX + cardW - 16, cardY + 18, 3, 0xFFE0);
+  spr.fillCircle(cardX + 22, cardY + cardH - 18, 2, 0x07FF);
+  spr.fillCircle(cardX + cardW - 22, cardY + cardH - 14, 2, 0xFD20);
+  tinyHeart(cardX + 18, cardY + 34, true, accent);
+  tinyHeart(cardX + cardW - 18, cardY + 38, false, 0xFFE0);
+}
+
+static void drawChristmasOrnaments(int cardX, int cardY, int cardW, int cardH, uint16_t accent) {
+  for (int i = 0; i < 5; i++) {
+    int x = cardX + 16 + i * 20;
+    spr.fillCircle(x, cardY + 16 + (i % 2), 1, 0xFFFF);
+    spr.fillCircle(x + 4, cardY + 28 + (i % 3), 1, 0xFFFF);
+  }
+  int sx = cardX + cardW - 18;
+  int sy = cardY + 18;
+  spr.drawLine(sx - 5, sy, sx + 5, sy, accent);
+  spr.drawLine(sx, sy - 5, sx, sy + 5, accent);
+  spr.drawLine(sx - 4, sy - 4, sx + 4, sy + 4, accent);
+  spr.drawLine(sx - 4, sy + 4, sx + 4, sy - 4, accent);
+}
+
+static void drawNewYearOrnaments(int cardX, int cardY, int cardW, int cardH, uint16_t accent) {
+  const int offsets[8][2] = {
+    {7, 0}, {5, 5}, {0, 7}, {-5, 5}, {-7, 0}, {-5, -5}, {0, -7}, {5, -5}
+  };
+  const int bursts[2][2] = {
+    {cardX + 18, cardY + 20},
+    {cardX + cardW - 18, cardY + 24},
+  };
+  for (int b = 0; b < 2; b++) {
+    int cx = bursts[b][0], cy = bursts[b][1];
+    for (int i = 0; i < 8; i++) {
+      spr.drawLine(cx, cy, cx + offsets[i][0], cy + offsets[i][1], accent);
+    }
+    spr.fillCircle(cx, cy, 1, 0xFFFF);
+  }
+}
+
+static bool showSeasonalCard() {
+  if (!tama.themeKey[0]) return false;
+  if (tama.sessionsWaiting > 0 || tama.sessionsRunning > 0) return false;
+  if (displayMode != DISP_NORMAL) return false;
+  return ((millis() / 7000UL) % 2UL) == 0;
+}
+
+static void drawSeasonalCard() {
+  const Palette& p = characterPalette();
+  const int CARD_X = 8;
+  const int CARD_Y = 82;
+  const int CARD_W = W - CARD_X * 2;
+  const int CARD_H = 106;
+  const int CENTER_X = CARD_X + CARD_W / 2;
+  const uint16_t accent = seasonalAccent(p);
+
+  spr.fillRect(0, 78, W, H - 78, p.bg);
+  spr.fillRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 8, PANEL);
+  spr.drawRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 8, accent);
+
+  if (strcmp(tama.themeKey, "birthday") == 0) drawBirthdayOrnaments(CARD_X, CARD_Y, CARD_W, CARD_H, accent);
+  else if (strcmp(tama.themeKey, "christmas") == 0) drawChristmasOrnaments(CARD_X, CARD_Y, CARD_W, CARD_H, accent);
+  else if (strcmp(tama.themeKey, "new-year") == 0) drawNewYearOrnaments(CARD_X, CARD_Y, CARD_W, CARD_H, accent);
+
+  spr.setTextDatum(MC_DATUM);
+  spr.setTextSize(1);
+  spr.setTextColor(p.textDim, PANEL);
+  spr.drawString(tama.themeTitle[0] ? tama.themeTitle : "Holiday", CENTER_X, CARD_Y + 18);
+
+  size_t subtitleLen = strlen(tama.themeSubtitle);
+  spr.setTextColor(accent, PANEL);
+  spr.setTextSize(subtitleLen <= 4 ? 3 : 2);
+  spr.drawString(tama.themeSubtitle[0] ? tama.themeSubtitle : "Mode", CENTER_X, CARD_Y + 50);
+
+  spr.setTextSize(1);
+  spr.setTextColor(p.text, PANEL);
+  if (tama.themeDetail[0]) {
+    spr.drawString(tama.themeDetail, CENTER_X, CARD_Y + 82);
+  }
+  spr.setTextColor(p.textDim, PANEL);
+  spr.drawString("holiday screensaver", CENTER_X, CARD_Y + 94);
+  spr.setTextDatum(TL_DATUM);
 }
 
 static void drawPetStats(const Palette& p) {
@@ -895,6 +989,7 @@ void drawHUD() {
                     && (!tama.noticeId[0] || strcmp(tama.noticeId, dismissedNoticeId) != 0);
   if (tama.promptId[0]) { drawApproval(); return; }
   if (noticeVisible) { drawNoticeCard(); return; }
+  if (showSeasonalCard()) { drawSeasonalCard(); return; }
   const Palette& p = characterPalette();
   const int SHOW = 3, LH = 8, WIDTH = 21;
   const int AREA = SHOW * LH + 4;
@@ -1064,6 +1159,10 @@ void loop() {
     responseSent = false;
     if (tama.promptId[0]) {
       promptArrivedMs = millis();
+      Serial.printf("prompt: arrive id=%s tool=%s ms=%lu\n",
+                    tama.promptId,
+                    tama.promptTool[0] ? tama.promptTool : "-",
+                    (unsigned long)promptArrivedMs);
       wake();
       beep(1200, 80);   // alert chirp
       // Jump to the approval screen no matter what was open — drawApproval
@@ -1073,6 +1172,8 @@ void loop() {
       applyDisplayMode();
       characterInvalidate();
       if (buddyMode) buddyInvalidate();
+    } else {
+      Serial.printf("prompt: clear ms=%lu\n", (unsigned long)millis());
     }
   }
   if (tama.noticeGen != lastNoticeGen) {

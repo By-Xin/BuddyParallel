@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 import threading
 from dataclasses import dataclass
-from time import sleep
+from time import sleep, time
 from uuid import uuid4
 
 from buddy_parallel.core.aggregator import StateAggregator
@@ -16,6 +17,13 @@ from buddy_parallel.runtime.config import AppConfig
 from buddy_parallel.runtime.logging_utils import configure_logging
 from buddy_parallel.runtime.runtime_config import write_runtime_config
 from buddy_parallel.runtime.state import RuntimeState, StateStore
+from buddy_parallel.services.embedded_mqtt_helper import build_helper_html
+from buddy_parallel.services.mqtt_notice_bridge import (
+    deliver_mqtt_notice_payload,
+    effective_mqtt_client_id,
+    parse_mqtt_endpoint,
+)
+from buddy_parallel.services.notice_bridge_common import deliver_text_notice
 from buddy_parallel.transports.ble_transport import BleTransport, ble_summary
 from buddy_parallel.transports.mock_transport import MockTransport
 from buddy_parallel.transports.serial_transport import SerialTransport, serial_summary
@@ -34,7 +42,7 @@ class CompanionRuntime:
         self.config = config
         self.logger = configure_logging()
         self.state_store = state_store or StateStore()
-        self.aggregator = StateAggregator()
+        self.aggregator = StateAggregator(config=config)
         initial_state = self.state_store.load()
         if config.weather_enabled and isinstance(initial_state.last_weather_payload, dict):
             self.aggregator.set_weather(initial_state.last_weather_payload)
@@ -45,6 +53,8 @@ class CompanionRuntime:
         self._device_io_lock = threading.RLock()
         self._serial_bootstrapped = False
         self._last_device_status: dict | None = None
+        self._notice_reinforce_lock = threading.Lock()
+        self._notice_reinforce_token = 0
         self._mock = MockTransport()
         self._serial = SerialTransport(port=config.serial_port, baud=config.serial_baud)
         self._ble = BleTransport(device_name=config.ble_device_name)
@@ -60,6 +70,14 @@ class CompanionRuntime:
             config.api_server_port,
             self.on_api_event,
             self.on_vscode_permission_request,
+            self.on_bridge_feishu_notice,
+            self.on_bridge_feishu_status,
+            self.on_bridge_mqtt_notice,
+            self.on_bridge_mqtt_status,
+            self.on_bridge_mqtt_config,
+            self.on_bridge_mqtt_helper_page,
+            self.on_hardware_refresh,
+            self.on_hardware_command,
         )
 
     def on_state_event(self, payload: dict) -> None:
@@ -115,6 +133,152 @@ class CompanionRuntime:
             "decision": decision,
             "allowed": decision == "allow",
         }
+
+    def on_bridge_mqtt_helper_page(self) -> str:
+        return build_helper_html(f"http://127.0.0.1:{self.config.api_server_port}")
+
+    def on_bridge_feishu_status(self, payload: dict) -> dict:
+        connected = bool(payload.get("connected", False))
+        last_error = str(payload.get("last_error") or "").strip()
+        summary = str(payload.get("last_message_summary") or "").strip()
+        self.logger.info(
+            "feishu bridge status connected=%s summary=%s error=%s",
+            connected,
+            summary,
+            last_error,
+        )
+        updates = {"feishu_connected": connected}
+        if not last_error:
+            updates["last_feishu_error"] = ""
+        if last_error:
+            updates["last_feishu_error"] = last_error
+        if summary:
+            updates["last_feishu_message_summary"] = summary[:40]
+        self.state_store.update(**updates)
+        return {"ok": True}
+
+    def on_bridge_feishu_notice(self, payload: dict) -> dict:
+        chat_id = str(payload.get("chat_id") or "").strip()
+        if chat_id and chat_id != self.config.feishu_allowed_chat_id:
+            return {"ok": True, "accepted": False}
+
+        text = ""
+        raw_content = payload.get("content")
+        if isinstance(raw_content, str):
+            try:
+                content_payload = json.loads(raw_content or "{}")
+            except Exception:
+                content_payload = {}
+            if isinstance(content_payload, dict):
+                text = str(content_payload.get("text") or "").strip()
+        if not text:
+            return {"ok": True, "accepted": False}
+
+        create_time = payload.get("create_time")
+        stamp = ""
+        try:
+            raw = int(create_time or 0)
+            if raw > 0:
+                moment = datetime.fromtimestamp(raw / 1000 if raw > 10**11 else raw)
+                stamp = moment.strftime("%d %b %H:%M")
+        except (TypeError, ValueError, OSError):
+            stamp = ""
+
+        message_id = str(payload.get("message_id") or int(time() * 1000))
+        deliver_text_notice(
+            self.post_transient_message,
+            text,
+            base_notice_id=f"feishu-{message_id}",
+            notice_from="B.Y.",
+            notice_stamp=stamp,
+        )
+        self.state_store.update(
+            feishu_connected=True,
+            last_feishu_error="",
+            last_feishu_message_summary=text[:40],
+            last_feishu_delivery_at=time(),
+        )
+        return {"ok": True, "accepted": True}
+
+    def on_bridge_mqtt_config(self) -> dict:
+        try:
+            endpoint = parse_mqtt_endpoint(self.config.notice_mqtt_url)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+        if endpoint.transport != "websockets":
+            return {"ok": False, "error": "embedded helper only supports ws or wss notice URLs"}
+        if not self.config.notice_mqtt_topic:
+            return {"ok": False, "error": "missing MQTT notice topic"}
+        if not self.config.notice_mqtt_username or not self.config.notice_mqtt_password:
+            return {"ok": False, "error": "missing MQTT notice credentials"}
+
+        return {
+            "ok": True,
+            "url": self.config.notice_mqtt_url,
+            "topic": self.config.notice_mqtt_topic,
+            "username": self.config.notice_mqtt_username,
+            "password": self.config.notice_mqtt_password,
+            "clientId": effective_mqtt_client_id(self.config),
+            "keepaliveSeconds": max(10, self.config.notice_mqtt_keepalive_seconds),
+        }
+
+    def on_bridge_mqtt_status(self, payload: dict) -> dict:
+        connected = bool(payload.get("connected", False))
+        last_error = str(payload.get("last_error") or "").strip()
+        summary = str(payload.get("last_message_summary") or "").strip()
+        self.logger.info(
+            "embedded mqtt status connected=%s summary=%s error=%s",
+            connected,
+            summary,
+            last_error,
+        )
+        updates = {
+            "mqtt_connected": connected,
+        }
+        if not last_error:
+            updates["last_mqtt_error"] = ""
+        if last_error:
+            updates["last_mqtt_error"] = last_error
+        if summary:
+            updates["last_mqtt_message_summary"] = summary[:40]
+        self.state_store.update(**updates)
+        return {"ok": True}
+
+    def on_bridge_mqtt_notice(self, payload: dict) -> dict:
+        accepted = deliver_mqtt_notice_payload(
+            payload=payload.get("payload"),
+            topic=str(payload.get("topic") or self.config.notice_mqtt_topic),
+            retain=bool(payload.get("retain", False)),
+            logger=self.logger,
+            state_store=self.state_store,
+            message_sink=self.post_transient_message,
+        )
+        return {"ok": True, "accepted": accepted}
+
+    def on_hardware_refresh(self) -> dict:
+        try:
+            status = self.refresh_device_status()
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+        if status is None:
+            return {"ok": False, "error": "device transport is unavailable"}
+        return {"ok": True, "status": status}
+
+    def on_hardware_command(self, payload: dict) -> dict:
+        if not isinstance(payload, dict):
+            return {"ok": False, "error": "payload must be a JSON object"}
+        command_payload = payload.get("command")
+        if not isinstance(command_payload, dict):
+            return {"ok": False, "error": "command must be a JSON object"}
+        refresh = bool(payload.get("refresh", True))
+        try:
+            status = self.apply_device_command(command_payload, refresh=refresh)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+        if status is None:
+            return {"ok": False, "error": "device transport is unavailable"}
+        return {"ok": True, "status": status}
 
     def start(self) -> None:
         self.hook_server.start()
@@ -324,6 +488,8 @@ class CompanionRuntime:
             action = str(payload.get("action") or "")
             dismissed = self.aggregator.dismiss_notice(notice_id)
             self._publish_heartbeat()
+            if dismissed:
+                self._schedule_notice_reinforcement()
             self.logger.info("device notice id=%s action=%s", notice_id, action or "ack")
             self.logger.info("device notice id=%s dismissed=%s", notice_id, dismissed)
             return
@@ -340,6 +506,28 @@ class CompanionRuntime:
         heartbeat = self.aggregator.build_heartbeat()
         self._send_heartbeat(heartbeat)
         self._write_runtime_snapshot("running")
+
+    def _schedule_notice_reinforcement(self) -> None:
+        heartbeat = self.aggregator.build_heartbeat()
+        if not heartbeat.get("notice"):
+            return
+        with self._notice_reinforce_lock:
+            self._notice_reinforce_token += 1
+            token = self._notice_reinforce_token
+
+        def worker() -> None:
+            for delay_seconds in (0.25, 1.0):
+                if self._stop.wait(delay_seconds):
+                    return
+                with self._notice_reinforce_lock:
+                    if token != self._notice_reinforce_token:
+                        return
+                try:
+                    self._publish_heartbeat()
+                except Exception:
+                    self.logger.exception("notice reinforcement heartbeat failed")
+
+        threading.Thread(target=worker, name="notice-reinforce", daemon=True).start()
 
     def _write_runtime_snapshot(self, status: str) -> None:
         heartbeat = self.aggregator.build_heartbeat()
