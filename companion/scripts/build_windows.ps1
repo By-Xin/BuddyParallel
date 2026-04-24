@@ -72,3 +72,77 @@ Set-Content -LiteralPath $setupShortcut -Encoding ASCII -Value @(
     "cd /d ""%~dp0""",
     """%~dp0BuddyParallel.exe"" setup"
 )
+
+$advancedDir = Join-Path $appDir "Advanced"
+New-Item -ItemType Directory -Force -Path $advancedDir | Out-Null
+
+Set-Content -LiteralPath (Join-Path $advancedDir "README.txt") -Encoding ASCII -Value @(
+    "BuddyParallel advanced config helpers",
+    "",
+    "Public releases do not include your personal config.",
+    "BuddyParallel reads config from %APPDATA%\BuddyParallel\config.json on each Windows account.",
+    "",
+    "Export Current Config.cmd",
+    "  Copies this Windows account's current config to shared-config.json next to these scripts.",
+    "  That file can contain API keys, tokens, chat IDs, and personal names.",
+    "  Share it only with people you trust.",
+    "",
+    "Import Shared Config.cmd",
+    "  Copies shared-config.json next to these scripts into %APPDATA%\BuddyParallel\config.json.",
+    "  This overwrites the local BuddyParallel config on that Windows account."
+)
+
+Set-Content -LiteralPath (Join-Path $advancedDir "Export Current Config.cmd") -Encoding ASCII -Value @(
+    "@echo off",
+    "setlocal",
+    "set ""SOURCE=%APPDATA%\BuddyParallel\config.json""",
+    "set ""DEST=%~dp0shared-config.json""",
+    "if not exist ""%SOURCE%"" (",
+    "  echo No BuddyParallel config found at:",
+    "  echo   %SOURCE%",
+    "  echo Open BuddyParallel once and save settings before exporting.",
+    "  pause",
+    "  exit /b 1",
+    ")",
+    "echo WARNING: this export may include API keys, tokens, chat IDs, and personal names.",
+    "echo It is meant only for trusted private beta sharing.",
+    "set /p CONFIRM=Type EXPORT to write shared-config.json: ",
+    "if /I not ""%CONFIRM%""==""EXPORT"" (",
+    "  echo Export canceled.",
+    "  pause",
+    "  exit /b 1",
+    ")",
+    "copy /Y ""%SOURCE%"" ""%DEST%"" >nul",
+    "echo Exported:",
+    "echo   %DEST%",
+    "pause"
+)
+
+Set-Content -LiteralPath (Join-Path $advancedDir "Import Shared Config.cmd") -Encoding ASCII -Value @(
+    "@echo off",
+    "setlocal",
+    "set ""SOURCE=%~dp0shared-config.json""",
+    "set ""TARGET_DIR=%APPDATA%\BuddyParallel""",
+    "set ""TARGET=%TARGET_DIR%\config.json""",
+    "if not exist ""%SOURCE%"" (",
+    "  echo shared-config.json was not found next to this script.",
+    "  echo Put the private beta shared config here:",
+    "  echo   %SOURCE%",
+    "  pause",
+    "  exit /b 1",
+    ")",
+    "echo This will overwrite this Windows account's BuddyParallel config:",
+    "echo   %TARGET%",
+    "set /p CONFIRM=Type IMPORT to continue: ",
+    "if /I not ""%CONFIRM%""==""IMPORT"" (",
+    "  echo Import canceled.",
+    "  pause",
+    "  exit /b 1",
+    ")",
+    "mkdir ""%TARGET_DIR%"" 2>nul",
+    "copy /Y ""%SOURCE%"" ""%TARGET%"" >nul",
+    "echo Imported shared BuddyParallel config.",
+    "echo Starting BuddyParallel...",
+    "start """" ""%~dp0..\BuddyParallel.exe""",
+    "pause"
+)

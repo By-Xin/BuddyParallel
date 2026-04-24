@@ -27,6 +27,22 @@ foreach ($name in $requiredFirmware) {
     }
 }
 
+$forbiddenConfigNames = @(
+    "config.json",
+    "state.json",
+    "runtime.json",
+    "buddy-parallel.log",
+    "shared-config.json"
+)
+$forbiddenConfigs = @(
+    Get-ChildItem -Path $appDir -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $forbiddenConfigNames -contains $_.Name }
+)
+if ($forbiddenConfigs.Count -gt 0) {
+    $paths = ($forbiddenConfigs | ForEach-Object { $_.FullName }) -join ", "
+    throw "Refusing to package local or shared runtime config files: $paths"
+}
+
 $vsixPath = ""
 if (-not $SkipVsix) {
     $vsixScript = Join-Path $repoRoot "vscode-extension\scripts\package_vsix.ps1"
