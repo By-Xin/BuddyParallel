@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 REPO_ROOT = Path(SPECPATH).resolve().parents[1]
@@ -36,7 +36,7 @@ firmware_sources = [
     / "partitions"
     / "boot_app0.bin",
 ]
-datas = [(str(path), "firmware") for path in firmware_sources if path.exists()]
+datas = collect_data_files("esptool") + [(str(path), "firmware") for path in firmware_sources if path.exists()]
 excludes = [
     "IPython",
     "PyQt5",

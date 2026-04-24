@@ -14,7 +14,7 @@ from buddy_parallel.runtime.config import AppConfig, ConfigStore
 from buddy_parallel.transports.serial_transport import SerialDeviceInfo, SerialTransport, discover_serial_devices
 
 
-DEFAULT_FLASH_BAUD = 460800
+DEFAULT_FLASH_BAUD = 115200
 DEFAULT_SERIAL_BAUD = 115200
 FIRMWARE_ENV_VAR = "BUDDY_PARALLEL_FIRMWARE_DIR"
 

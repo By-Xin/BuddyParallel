@@ -93,6 +93,9 @@ class BoardSetupTests(unittest.TestCase):
         self.assertIn("write_flash", calls[0])
         self.assertIn("runner ok", progress)
 
+    def test_default_flash_baud_favors_reliable_beta_flashing(self) -> None:
+        self.assertEqual(board_setup.DEFAULT_FLASH_BAUD, 115200)
+
 
 if __name__ == "__main__":
     unittest.main()
