@@ -64,3 +64,11 @@ if (-not $SkipFirmwareCheck) {
 $baseArgs = @("-m", "PyInstaller", "--noconfirm", "--clean", "--distpath", $distDir, "--workpath", $buildDir, $specPath)
 
 Invoke-CheckedExternal $PythonExe @baseArgs
+
+$appDir = Join-Path $distDir "BuddyParallel"
+$setupShortcut = Join-Path $appDir "Setup Board.cmd"
+Set-Content -LiteralPath $setupShortcut -Encoding ASCII -Value @(
+    "@echo off",
+    "cd /d ""%~dp0""",
+    """%~dp0BuddyParallel.exe"" setup"
+)

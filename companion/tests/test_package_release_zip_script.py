@@ -10,6 +10,7 @@ class PackageReleaseZipScriptTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("BuddyParallel.exe", script)
+        self.assertIn("Setup Board.cmd", script)
         self.assertIn("BuddyParallel-v$Version-$Platform.zip", script)
         self.assertIn("boot_app0.bin", script)
         self.assertIn("package_vsix.ps1", script)

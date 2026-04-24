@@ -33,6 +33,7 @@ Turn the current developer-friendly BuddyParallel checkout into a Windows build 
 - packaging notes: `buddy-parallel packaging-notes`
 - current slimming strategy: explicitly exclude unrelated scientific, notebook, Qt, and test toolchains from the frozen build
 - firmware bundle: PyInstaller includes `bootloader.bin`, `partitions.bin`, `boot_app0.bin`, and `firmware.bin` when the local PlatformIO build outputs exist
+- packaged helper: `Setup Board.cmd` launches the board setup window for users who already have a config or need to reflash
 
 ## Preferred build flow
 
@@ -51,6 +52,7 @@ The release zip includes `vscode-extension/BuddyParallel-vscode-<version>.vsix`.
 ## Immediate checklist
 
 - verify first-run setup opens before the tray runtime starts on a clean config
+- verify `Setup Board.cmd` opens the same setup window from the release zip
 - verify setup refuses to flash without an explicit confirmation
 - verify setup saves the selected COM port under `%APPDATA%\BuddyParallel`
 - verify the VSIX installs in VS Code and can reach the local companion API at `http://127.0.0.1:43112`

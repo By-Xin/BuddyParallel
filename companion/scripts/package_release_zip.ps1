@@ -10,9 +10,13 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $distDir = Join-Path $repoRoot "dist"
 $appDir = Join-Path $distDir "BuddyParallel"
 $exePath = Join-Path $appDir "BuddyParallel.exe"
+$setupShortcut = Join-Path $appDir "Setup Board.cmd"
 
 if (-not (Test-Path $exePath)) {
     throw "Packaged app not found: $exePath. Run companion\scripts\build_windows.ps1 first."
+}
+if (-not (Test-Path $setupShortcut)) {
+    throw "Setup shortcut not found: $setupShortcut. Run companion\scripts\build_windows.ps1 first."
 }
 
 $requiredFirmware = @("bootloader.bin", "partitions.bin", "boot_app0.bin", "firmware.bin")

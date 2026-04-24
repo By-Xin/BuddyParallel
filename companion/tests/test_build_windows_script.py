@@ -14,6 +14,7 @@ class BuildWindowsScriptTests(unittest.TestCase):
         self.assertIn(".venv-build", script)
         self.assertIn("SkipFirmwareCheck", script)
         self.assertIn("boot_app0.bin", script)
+        self.assertIn("Setup Board.cmd", script)
         self.assertIn("Invoke-CheckedExternal", script)
 
 
