@@ -22,25 +22,147 @@ BuddyParallel is well past bootstrap. The primary USB companion loop is working,
 
 ## ASCII buddies
 
-Local gallery: [`docs/ascii-buddies.html`](docs/ascii-buddies.html)
+Renderable gallery: [`docs/ascii-buddies.md`](docs/ascii-buddies.md)
 
-Current firmware roster, with a quick human-style voice note for each buddy:
+Current firmware roster, with one representative idle pose and a quick human-style voice note for each buddy:
 
-- `axolotl`: soft-spoken night-shift friend who quietly says, "Let's keep this gentle and figure it out one blink at a time."
-- `blob`: sleepy optimist who sounds like, "I may look gooey, but I am emotionally available and surprisingly resilient."
-- `cactus`: dry-humored protector who says, "I care a lot, I just come pre-equipped with boundaries."
-- `capybara`: impossibly calm coworker who says, "Nothing here is worth panicking over; we can float through it."
-- `cat`: mildly judgmental genius who says, "I already knew the answer, but I will allow you to discover it."
-- `chonk`: big-hearted tank who says, "I believe in comfort, snacks, and shipping things that actually hold up."
-- `dragon`: theatrical senior engineer who says, "Stand back, I can solve this elegantly or dramatically, possibly both."
-- `duck`: cheerful chaos gremlin who says, "I have no long-term plan, but I do have momentum."
-- `ghost`: polite lurker who says, "I am not haunting the project; I am just monitoring it with concern."
-- `goose`: loud operations lead who says, "This is now my incident, and I will be honking until it is fixed."
-- `mushroom`: cozy healer who says, "Come sit down; recovery is also part of the roadmap."
-- `octopus`: multitasking coordinator who says, "I can hold eight threads at once, but I would still prefer a checklist."
-- `owl`: late-night scholar who says, "The answer was always in the margins if you stayed up long enough."
-- `penguin`: tidy teammate who says, "We do this with dignity, structure, and a very clean handoff."
-- `rabbit`: high-energy sprinter who says, "I already started three versions, and one of them is definitely the winner."
-- `robot`: precise builder who says, "Please clarify the requirement so I can be correct at industrial scale."
-- `snail`: slow-and-steady craftsperson who says, "Fast is nice, but finished and well-shaped is nicer."
-- `turtle`: dependable elder who says, "We are still moving, which means we are still winning."
+<table>
+  <tr>
+    <td valign="top"><strong>axolotl</strong><pre>
+
+}~(______)~{
+}~( o  o )~{
+  ( .--. )
+  (_/  \_)
+</pre><sub>"Let's keep this gentle and figure it out one blink at a time."</sub></td>
+    <td valign="top"><strong>blob</strong><pre>
+
+   .----.
+  ( o  o )
+  (      )
+   `----`
+</pre><sub>"I may look gooey, but I am emotionally available and surprisingly resilient."</sub></td>
+    <td valign="top"><strong>cactus</strong><pre>
+
+ n  ____  n
+ | |o  o| |
+ |_|    |_|
+   |    |
+</pre><sub>"I care a lot, I just come pre-equipped with boundaries."</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>capybara</strong><pre>
+
+  n______n
+ ( o    o )
+ (   oo   )
+  `------'
+</pre><sub>"Nothing here is worth panicking over; we can float through it."</sub></td>
+    <td valign="top"><strong>cat</strong><pre>
+
+   /\_/\
+  ( o   o )
+  (  w   )
+  (")_(")
+</pre><sub>"I already knew the answer, but I will allow you to discover it."</sub></td>
+    <td valign="top"><strong>chonk</strong><pre>
+
+  /\____/\
+ ( o    o )
+ (   ..   )
+  `------'
+</pre><sub>"I believe in comfort, snacks, and shipping things that actually hold up."</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>dragon</strong><pre>
+
+  /^\  /^\
+ &lt;  o    o &gt;
+ (   ww   )
+  `-vvvv-'
+</pre><sub>"Stand back, I can solve this elegantly or dramatically, possibly both."</sub></td>
+    <td valign="top"><strong>duck</strong><pre>
+
+    __
+  &lt;(o )___
+   (  ._&gt;
+    `--'
+</pre><sub>"I have no long-term plan, but I do have momentum."</sub></td>
+    <td valign="top"><strong>ghost</strong><pre>
+
+   .----.
+  ( o    o )
+  |   __   |
+  ~`~``~`~
+</pre><sub>"I am not haunting the project; I am just monitoring it with concern."</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>goose</strong><pre>
+
+    (&gt;
+    ||
+  _(__)_
+   ^^^^
+</pre><sub>"This is now my incident, and I will be honking until it is fixed."</sub></td>
+    <td valign="top"><strong>mushroom</strong><pre>
+
+ .-o-OO-o-.
+(__________)
+   |o   o|
+   |____|
+</pre><sub>"Come sit down; recovery is also part of the roadmap."</sub></td>
+    <td valign="top"><strong>octopus</strong><pre>
+
+   .----.
+  ( o  o )
+  (______)
+  /\/\/\/\
+</pre><sub>"I can hold eight threads at once, but I would still prefer a checklist."</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>owl</strong><pre>
+
+   /\  /\
+  ((O)(O))
+  (  &gt;&lt;  )
+   `----'
+</pre><sub>"The answer was always in the margins if you stayed up long enough."</sub></td>
+    <td valign="top"><strong>penguin</strong><pre>
+   .---.
+  ( o&gt;o )
+ /(     )\
+  `-----`
+   J   L
+</pre><sub>"We do this with dignity, structure, and a very clean handoff."</sub></td>
+    <td valign="top"><strong>rabbit</strong><pre>
+    (\_/)
+   ( o o )
+  =(  v  )=
+   (")_(")
+
+</pre><sub>"I already started three versions, and one of them is definitely the winner."</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>robot</strong><pre>
+
+   .[||].
+  [ o    o ]
+  [ ==== ]
+  `------'
+</pre><sub>"Please clarify the requirement so I can be correct at industrial scale."</sub></td>
+    <td valign="top"><strong>snail</strong><pre>
+  \\  /
+    .--.
+  _( oo )_
+ (___@@___)
+  ~~~~~~~~
+</pre><sub>"Fast is nice, but finished and well-shaped is nicer."</sub></td>
+    <td valign="top"><strong>turtle</strong><pre>
+
+   _,--._
+  ( o    o)
+ /[______]\
+  ``    ``
+</pre><sub>"We are still moving, which means we are still winning."</sub></td>
+  </tr>
+</table>
