@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
@@ -111,7 +111,11 @@ class ConfigStore:
         if not self.path.exists():
             return AppConfig()
         data = json.loads(self.path.read_text(encoding="utf-8-sig"))
-        return validate_config(AppConfig(**{**asdict(AppConfig()), **data}))
+        defaults = asdict(AppConfig())
+        known_fields = {field.name for field in fields(AppConfig)}
+        if isinstance(data, dict):
+            defaults.update({key: value for key, value in data.items() if key in known_fields})
+        return validate_config(AppConfig(**defaults))
 
     def save(self, config: AppConfig) -> None:
         config = validate_config(config)
