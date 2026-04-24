@@ -18,6 +18,29 @@ function Invoke-CheckedExternal {
     }
 }
 
+function Assert-PythonModules {
+    param(
+        [Parameter(Mandatory = $true)][string]$Executable,
+        [Parameter(Mandatory = $true)][string[]]$Modules
+    )
+
+    $checkScript = @'
+import importlib.util
+import sys
+
+missing = [name for name in sys.argv[1:] if importlib.util.find_spec(name) is None]
+if missing:
+    print('Missing Python modules required for BuddyParallel packaging: ' + ', '.join(missing))
+    print('Run: powershell -ExecutionPolicy Bypass -File companion\\scripts\\prepare_build_env.ps1')
+    raise SystemExit(1)
+'@
+
+    & $Executable -c $checkScript @Modules
+    if ($LASTEXITCODE -ne 0) {
+        throw "Build Python is missing required packaging modules. Use companion\scripts\prepare_build_env.ps1, then rerun this build."
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $companionRoot = Join-Path $repoRoot "companion"
 $specPath = Join-Path $companionRoot "packaging\buddy_parallel.spec"
@@ -60,6 +83,16 @@ if (-not $SkipFirmwareCheck) {
         throw "Firmware artifacts are missing. Build firmware first or pass -SkipFirmwareCheck for app-only builds: $($missingFirmware -join ', ')"
     }
 }
+
+Assert-PythonModules $PythonExe @(
+    "PyInstaller",
+    "PIL",
+    "bleak",
+    "esptool",
+    "lark_oapi",
+    "pystray",
+    "serial"
+)
 
 $baseArgs = @("-m", "PyInstaller", "--noconfirm", "--clean", "--distpath", $distDir, "--workpath", $buildDir, $specPath)
 

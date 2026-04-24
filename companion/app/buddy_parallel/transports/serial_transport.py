@@ -20,6 +20,7 @@ class SerialDeviceInfo:
     device: str
     description: str = ""
     manufacturer: str = ""
+    hwid: str = ""
 
 
 class SerialTransport(TransportBase):
@@ -157,14 +158,23 @@ def discover_serial_devices() -> list[SerialDeviceInfo]:
         return []
     devices: list[SerialDeviceInfo] = []
     for port in list_ports.comports():
+        info = SerialDeviceInfo(
+            device=getattr(port, "device", ""),
+            description=getattr(port, "description", ""),
+            manufacturer=getattr(port, "manufacturer", ""),
+            hwid=getattr(port, "hwid", ""),
+        )
+        if _is_bluetooth_serial_device(info):
+            continue
         devices.append(
-            SerialDeviceInfo(
-                device=getattr(port, "device", ""),
-                description=getattr(port, "description", ""),
-                manufacturer=getattr(port, "manufacturer", ""),
-            )
+            info
         )
     return devices
+
+
+def _is_bluetooth_serial_device(device: SerialDeviceInfo) -> bool:
+    text = f"{device.description} {device.manufacturer} {device.hwid}".lower()
+    return any(token in text for token in ("bluetooth", "bthenum", "蓝牙"))
 
 
 def serial_summary(preferred_port: str = "") -> dict:

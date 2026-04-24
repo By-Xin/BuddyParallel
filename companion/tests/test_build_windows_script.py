@@ -16,6 +16,9 @@ class BuildWindowsScriptTests(unittest.TestCase):
         self.assertIn("boot_app0.bin", script)
         self.assertIn("Setup Board.cmd", script)
         self.assertIn("Invoke-CheckedExternal", script)
+        self.assertIn("Assert-PythonModules", script)
+        self.assertIn('"esptool"', script)
+        self.assertIn('"serial"', script)
 
 
 if __name__ == "__main__":

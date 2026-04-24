@@ -11,6 +11,7 @@ $distDir = Join-Path $repoRoot "dist"
 $appDir = Join-Path $distDir "BuddyParallel"
 $exePath = Join-Path $appDir "BuddyParallel.exe"
 $setupShortcut = Join-Path $appDir "Setup Board.cmd"
+$firmwareDir = Join-Path $appDir "_internal\firmware"
 
 if (-not (Test-Path $exePath)) {
     throw "Packaged app not found: $exePath. Run companion\scripts\build_windows.ps1 first."
@@ -18,13 +19,25 @@ if (-not (Test-Path $exePath)) {
 if (-not (Test-Path $setupShortcut)) {
     throw "Setup shortcut not found: $setupShortcut. Run companion\scripts\build_windows.ps1 first."
 }
+if (-not (Test-Path $firmwareDir)) {
+    throw "Packaged firmware directory not found: $firmwareDir. Run companion\scripts\build_windows.ps1 first."
+}
 
 $requiredFirmware = @("bootloader.bin", "partitions.bin", "boot_app0.bin", "firmware.bin")
 foreach ($name in $requiredFirmware) {
-    $match = Get-ChildItem -Path $appDir -Recurse -Filter $name -ErrorAction SilentlyContinue | Select-Object -First 1
+    $match = Get-ChildItem -Path $firmwareDir -Recurse -Filter $name -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -eq $match) {
-        throw "Packaged firmware artifact not found in ${appDir}: $name"
+        throw "Packaged firmware artifact not found in ${firmwareDir}: $name"
     }
+}
+
+$forbiddenFirmware = @(
+    Get-ChildItem -Path $firmwareDir -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match "cores3|m5stack|m5stick-s3|stick-s3" }
+)
+if ($forbiddenFirmware.Count -gt 0) {
+    $paths = ($forbiddenFirmware | ForEach-Object { $_.FullName }) -join ", "
+    throw "Refusing to package non-M5StickC-Plus firmware artifacts: $paths"
 }
 
 $forbiddenConfigNames = @(
