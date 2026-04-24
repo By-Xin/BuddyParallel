@@ -16,6 +16,7 @@ Turn the current developer-friendly BuddyParallel checkout into a Windows build 
 - ship one BuddyParallel app family, even if helper processes still exist internally
 - keep tray, settings, dashboard, and helper launches on unified commands
 - preserve `%APPDATA%\BuddyParallel` as the durable config and log location
+- ensure only one runtime-owning BuddyParallel instance is active at a time
 - make startup integration point to the packaged app, not a repo checkout
 - avoid requiring users to install Python dependencies manually
 
@@ -32,14 +33,16 @@ Turn the current developer-friendly BuddyParallel checkout into a Windows build 
 
 1. `powershell -ExecutionPolicy Bypass -File companion/scripts/prepare_build_env.ps1`
 2. `powershell -ExecutionPolicy Bypass -File companion/scripts/build_windows.ps1 -Clean`
-3. inspect `dist/BuddyParallel.exe`
+3. inspect `dist/BuddyParallel/BuddyParallel.exe`
 4. smoke-test tray launch and core device behavior from the packaged build
 
 ## Immediate checklist
 
+- verify a second BuddyParallel launch exits instead of competing for COM or notice bridge resources
 - verify packaged tray launch
 - verify standalone settings and dashboard launch from the packaged build
 - verify startup shortcut creation
 - verify USB serial operation on the main board path
 - verify the chosen notice transport end-to-end on a clean Windows machine
+- use `BUDDY_PARALLEL_APP_DIR` for packaged smoke tests that must not touch the user's real config
 - verify logs and config exports do not leak secrets
