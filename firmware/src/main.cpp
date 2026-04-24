@@ -719,29 +719,56 @@ static void drawNoticeCard() {
 }
 
 static uint16_t weatherAccent(uint8_t code, const Palette& p);
+static uint16_t seasonalAccent(const Palette& p);
+static uint32_t seasonalDayKey();
+static bool seasonalBannerPending();
+static bool seasonalTickerActive();
+static void buildSeasonalGreeting(char* out, size_t len);
+static void buildSeasonalBannerTagline(char* out, size_t len);
+static void drawSeasonalMini(int centerX, int topY, bool large, uint16_t accent);
 static bool showSeasonalCard();
 static void drawSeasonalCard();
-static int clockCardTop(bool hasWeather);
+static int clockCardTop(bool hasFooter, bool hasMini);
 
 static void drawClockCard() {
   if (!dataRtcValid()) return;
 
   const Palette& p = characterPalette();
-  const bool hasWeather = tama.weatherSummary[0] != 0;
-  const int FOOTER_H = 3 * 8 + 4;
-  const int CARD_H = hasWeather ? 54 : 44;
+  const bool hasMini = seasonalTickerActive();
+  char footer[24] = "";
+  uint16_t footerColor = p.textDim;
+  if (seasonalTickerActive()) {
+    char greeting[24] = "";
+    buildSeasonalGreeting(greeting, sizeof(greeting));
+    bool showWeather = tama.weatherSummary[0] && ((millis() / 7000UL) % 2UL) == 0;
+    if (showWeather) {
+      strncpy(footer, tama.weatherSummary, sizeof(footer) - 1);
+      footerColor = weatherAccent(tama.weatherCode, p);
+    } else if (greeting[0]) {
+      strncpy(footer, greeting, sizeof(footer) - 1);
+      footerColor = seasonalAccent(p);
+    } else if (tama.weatherSummary[0]) {
+      strncpy(footer, tama.weatherSummary, sizeof(footer) - 1);
+      footerColor = weatherAccent(tama.weatherCode, p);
+    }
+  } else if (tama.weatherSummary[0]) {
+    strncpy(footer, tama.weatherSummary, sizeof(footer) - 1);
+    footerColor = weatherAccent(tama.weatherCode, p);
+  }
+  const bool hasFooter = footer[0] != 0;
+  const int CARD_H = hasMini ? 68 : (hasFooter ? 54 : 44);
   const int CARD_X = 10;
   const int CARD_W = W - CARD_X * 2;
-  const int CARD_Y = clockCardTop(hasWeather);
+  const int CARD_Y = clockCardTop(hasFooter, hasMini);
   const int CENTER_X = CARD_X + CARD_W / 2;
-  const int TIME_Y = CARD_Y + (hasWeather ? 13 : 15);
-  const int META_Y = CARD_Y + (hasWeather ? 31 : 35);
-  const int WEATHER_Y = CARD_Y + 44;
+  const int TIME_Y = CARD_Y + (hasMini ? 12 : (hasFooter ? 13 : 15));
+  const int META_Y = CARD_Y + (hasMini ? 28 : (hasFooter ? 31 : 35));
+  const int WEATHER_Y = CARD_Y + (hasMini ? 41 : 44);
+  const int MINI_Y = CARD_Y + 54;
 
   char hm[6]; snprintf(hm, sizeof(hm), "%02u:%02u", _clkTm.Hours, _clkTm.Minutes);
   uint8_t mi = (_clkDt.Month >= 1 && _clkDt.Month <= 12) ? _clkDt.Month - 1 : 0;
   char meta[24]; snprintf(meta, sizeof(meta), "%s %02u / %s", MON[mi], _clkDt.Date, DOW[clockDow()]);
-  uint16_t accent = weatherAccent(tama.weatherCode, p);
 
   spr.fillRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 6, p.bg);
   spr.setTextDatum(MC_DATUM);
@@ -751,16 +778,17 @@ static void drawClockCard() {
   spr.setTextSize(1);
   spr.setTextColor(p.textDim, p.bg);
   spr.drawString(meta, CENTER_X, META_Y);
-  if (hasWeather) {
-    spr.setTextColor(accent, p.bg);
-    spr.drawString(tama.weatherSummary, CENTER_X, WEATHER_Y);
+  if (hasFooter) {
+    spr.setTextColor(footerColor, p.bg);
+    spr.drawString(footer, CENTER_X, WEATHER_Y);
   }
+  if (hasMini) drawSeasonalMini(CENTER_X, MINI_Y, false, seasonalAccent(p));
   spr.setTextDatum(TL_DATUM);
 }
 
-static int clockCardTop(bool hasWeather) {
+static int clockCardTop(bool hasFooter, bool hasMini) {
   const int FOOTER_H = 3 * 8 + 4;
-  const int CARD_H = hasWeather ? 54 : 44;
+  const int CARD_H = hasMini ? 68 : (hasFooter ? 54 : 44);
   return H - FOOTER_H - CARD_H - 8;
 }
 
@@ -793,87 +821,143 @@ static uint16_t seasonalAccent(const Palette& p) {
   return p.body;
 }
 
-static void drawBirthdayOrnaments(int cardX, int cardY, int cardW, int cardH, uint16_t accent) {
-  spr.fillCircle(cardX + 16, cardY + 14, 3, accent);
-  spr.fillCircle(cardX + cardW - 16, cardY + 18, 3, 0xFFE0);
-  spr.fillCircle(cardX + 22, cardY + cardH - 18, 2, 0x07FF);
-  spr.fillCircle(cardX + cardW - 22, cardY + cardH - 14, 2, 0xFD20);
-  tinyHeart(cardX + 18, cardY + 34, true, accent);
-  tinyHeart(cardX + cardW - 18, cardY + 38, false, 0xFFE0);
+static uint32_t seasonalDayKey() {
+  if (!dataRtcValid()) return 0;
+  return (uint32_t)_clkDt.Year * 10000UL + (uint32_t)_clkDt.Month * 100UL + (uint32_t)_clkDt.Date;
 }
 
-static void drawChristmasOrnaments(int cardX, int cardY, int cardW, int cardH, uint16_t accent) {
-  for (int i = 0; i < 5; i++) {
-    int x = cardX + 16 + i * 20;
-    spr.fillCircle(x, cardY + 16 + (i % 2), 1, 0xFFFF);
-    spr.fillCircle(x + 4, cardY + 28 + (i % 3), 1, 0xFFFF);
-  }
-  int sx = cardX + cardW - 18;
-  int sy = cardY + 18;
-  spr.drawLine(sx - 5, sy, sx + 5, sy, accent);
-  spr.drawLine(sx, sy - 5, sx, sy + 5, accent);
-  spr.drawLine(sx - 4, sy - 4, sx + 4, sy + 4, accent);
-  spr.drawLine(sx - 4, sy + 4, sx + 4, sy - 4, accent);
+static bool seasonalIdleActive() {
+  return tama.themeKey[0] && tama.sessionsWaiting == 0 && tama.sessionsRunning == 0;
 }
 
-static void drawNewYearOrnaments(int cardX, int cardY, int cardW, int cardH, uint16_t accent) {
-  const int offsets[8][2] = {
-    {7, 0}, {5, 5}, {0, 7}, {-5, 5}, {-7, 0}, {-5, -5}, {0, -7}, {5, -5}
-  };
-  const int bursts[2][2] = {
-    {cardX + 18, cardY + 20},
-    {cardX + cardW - 18, cardY + 24},
-  };
-  for (int b = 0; b < 2; b++) {
-    int cx = bursts[b][0], cy = bursts[b][1];
-    for (int i = 0; i < 8; i++) {
-      spr.drawLine(cx, cy, cx + offsets[i][0], cy + offsets[i][1], accent);
-    }
-    spr.fillCircle(cx, cy, 1, 0xFFFF);
+static bool seasonalBannerPending() {
+  if (!seasonalIdleActive()) return false;
+  if (displayMode != DISP_NORMAL) return false;
+  uint32_t day = seasonalDayKey();
+  if (day == 0) return true;
+  return !seasonalAckedToday(tama.themeKey, day);
+}
+
+static bool seasonalTickerActive() {
+  return seasonalIdleActive() && !seasonalBannerPending();
+}
+
+static void buildSeasonalGreeting(char* out, size_t len) {
+  if (!out || len == 0) return;
+  out[0] = 0;
+  if (!tama.themeKey[0]) return;
+
+  if (strcmp(tama.themeKey, "birthday") == 0) {
+    snprintf(out, len, "Happy Birthday");
+  } else if (strcmp(tama.themeKey, "christmas") == 0) {
+    snprintf(out, len, "Merry XMAS");
+  } else if (strcmp(tama.themeKey, "new-year") == 0) {
+    snprintf(out, len, "Happy New Year");
+  } else if (tama.themeTitle[0] || tama.themeSubtitle[0]) {
+    snprintf(out, len, "%s %s", tama.themeTitle, tama.themeSubtitle);
   }
+  out[len - 1] = 0;
+}
+
+static void buildSeasonalBannerTagline(char* out, size_t len) {
+  if (!out || len == 0) return;
+  out[0] = 0;
+  if (!tama.themeKey[0]) return;
+
+  if (strcmp(tama.themeKey, "birthday") == 0) {
+    snprintf(out, len, "Party-ready buddy");
+  } else if (strcmp(tama.themeKey, "christmas") == 0) {
+    snprintf(out, len, "Tiny buddy big joy");
+  } else if (strcmp(tama.themeKey, "new-year") == 0) {
+    snprintf(out, len, "New year new builds");
+  }
+  out[len - 1] = 0;
+}
+
+static void drawSeasonalMini(int centerX, int topY, bool large, uint16_t accent) {
+  const uint16_t light = 0xFFFF;
+  const int w = large ? 20 : 14;
+  const int h = large ? 14 : 10;
+  const int x = centerX - w / 2;
+  const int y = topY;
+
+  if (strcmp(tama.themeKey, "birthday") == 0) {
+    const int baseY = y + h - 4;
+    spr.fillRoundRect(x, baseY, w + 1, 4, 1, accent);
+    spr.fillCircle(centerX - 4, baseY - 1, 2, light);
+    spr.fillCircle(centerX, baseY - 2, 2, light);
+    spr.fillCircle(centerX + 4, baseY - 1, 2, light);
+    spr.fillRect(centerX - 1, y + 2, 2, baseY - y - 4, light);
+    spr.fillCircle(centerX, y, large ? 2 : 1, 0xFFE0);
+    spr.drawPixel(centerX - 4, baseY + 1, HOT);
+    spr.drawPixel(centerX + 4, baseY + 1, 0xFFE0);
+    return;
+  }
+
+  if (strcmp(tama.themeKey, "christmas") == 0) {
+    const int trunkW = large ? 4 : 3;
+    const int trunkH = large ? 4 : 3;
+    spr.fillTriangle(centerX - w / 2 + 2, y + h - 6, centerX + w / 2 - 2, y + h - 6, centerX, y + 2, accent);
+    spr.fillTriangle(centerX - w / 2 + 1, y + h - 3, centerX + w / 2 - 1, y + h - 3, centerX, y + 5, accent);
+    spr.fillRect(centerX - trunkW / 2, y + h - trunkH, trunkW, trunkH, light);
+    spr.fillCircle(centerX, y + 1, 1, 0xFFE0);
+    return;
+  }
+
+  const int cy = y + h / 2;
+  const int arm = large ? 5 : 4;
+  spr.drawLine(centerX - arm, cy, centerX + arm, cy, accent);
+  spr.drawLine(centerX, cy - arm, centerX, cy + arm, accent);
+  spr.drawLine(centerX - arm + 1, cy - arm + 1, centerX + arm - 1, cy + arm - 1, accent);
+  spr.drawLine(centerX - arm + 1, cy + arm - 1, centerX + arm - 1, cy - arm + 1, accent);
+  spr.fillCircle(centerX, cy, 1, light);
+  spr.fillCircle(centerX - arm - 1, cy - 1, 1, 0xFFE0);
+  spr.fillCircle(centerX + arm + 1, cy + 1, 1, HOT);
 }
 
 static bool showSeasonalCard() {
-  if (!tama.themeKey[0]) return false;
-  if (tama.sessionsWaiting > 0 || tama.sessionsRunning > 0) return false;
-  if (displayMode != DISP_NORMAL) return false;
-  return ((millis() / 7000UL) % 2UL) == 0;
+  return seasonalBannerPending();
 }
 
 static void drawSeasonalCard() {
   const Palette& p = characterPalette();
   const int CARD_X = 8;
-  const int CARD_Y = 82;
+  const int CARD_Y = 84;
   const int CARD_W = W - CARD_X * 2;
-  const int CARD_H = 106;
+  const int CARD_H = 112;
   const int CENTER_X = CARD_X + CARD_W / 2;
   const uint16_t accent = seasonalAccent(p);
+  char tagline[24] = "";
+  buildSeasonalBannerTagline(tagline, sizeof(tagline));
 
   spr.fillRect(0, 78, W, H - 78, p.bg);
   spr.fillRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 8, PANEL);
   spr.drawRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 8, accent);
-
-  if (strcmp(tama.themeKey, "birthday") == 0) drawBirthdayOrnaments(CARD_X, CARD_Y, CARD_W, CARD_H, accent);
-  else if (strcmp(tama.themeKey, "christmas") == 0) drawChristmasOrnaments(CARD_X, CARD_Y, CARD_W, CARD_H, accent);
-  else if (strcmp(tama.themeKey, "new-year") == 0) drawNewYearOrnaments(CARD_X, CARD_Y, CARD_W, CARD_H, accent);
+  spr.drawFastHLine(CARD_X + 12, CARD_Y + 10, CARD_W - 24, accent);
+  drawSeasonalMini(CENTER_X, CARD_Y + 14, true, accent);
 
   spr.setTextDatum(MC_DATUM);
-  spr.setTextSize(1);
-  spr.setTextColor(p.textDim, PANEL);
-  spr.drawString(tama.themeTitle[0] ? tama.themeTitle : "Holiday", CENTER_X, CARD_Y + 18);
-
+  size_t titleLen = strlen(tama.themeTitle);
   size_t subtitleLen = strlen(tama.themeSubtitle);
+  bool largeTitle = titleLen > 0 && titleLen <= 6;
+  spr.setTextColor(p.text, PANEL);
+  spr.setTextSize(largeTitle ? 2 : 1);
+  spr.drawString(tama.themeTitle[0] ? tama.themeTitle : "Holiday", CENTER_X, CARD_Y + (largeTitle ? 36 : 34));
+
   spr.setTextColor(accent, PANEL);
   spr.setTextSize(subtitleLen <= 4 ? 3 : 2);
-  spr.drawString(tama.themeSubtitle[0] ? tama.themeSubtitle : "Mode", CENTER_X, CARD_Y + 50);
+  spr.drawString(tama.themeSubtitle[0] ? tama.themeSubtitle : "Mode", CENTER_X, CARD_Y + (largeTitle ? 58 : 56));
 
   spr.setTextSize(1);
   spr.setTextColor(p.text, PANEL);
   if (tama.themeDetail[0]) {
-    spr.drawString(tama.themeDetail, CENTER_X, CARD_Y + 82);
+    spr.drawString(tama.themeDetail, CENTER_X, CARD_Y + 80);
   }
   spr.setTextColor(p.textDim, PANEL);
-  spr.drawString("holiday screensaver", CENTER_X, CARD_Y + 94);
+  if (tagline[0]) {
+    spr.drawString(tagline, CENTER_X, CARD_Y + 92);
+  }
+  spr.drawString("[Press B to hide]", CENTER_X, CARD_Y + 102);
   spr.setTextDatum(TL_DATUM);
 }
 
@@ -993,7 +1077,9 @@ void drawHUD() {
   const Palette& p = characterPalette();
   const int SHOW = 3, LH = 8, WIDTH = 21;
   const int AREA = SHOW * LH + 4;
-  const int clearTop = dataRtcValid() ? clockCardTop(tama.weatherSummary[0] != 0) : (H - 78);
+  const int clearTop = dataRtcValid()
+                     ? clockCardTop(tama.weatherSummary[0] != 0 || seasonalTickerActive(), seasonalTickerActive())
+                     : (H - 78);
   spr.fillRect(0, clearTop, W, H - clearTop, p.bg);
   drawClockCard();
   spr.fillRect(0, H - AREA, W, AREA, p.bg);
@@ -1197,6 +1283,7 @@ void loop() {
   bool inPrompt = tama.promptId[0] && !responseSent;
   bool noticeVisible = (tama.noticeBody[0] || tama.noticeFrom[0] || tama.noticeStamp[0])
                     && (!tama.noticeId[0] || strcmp(tama.noticeId, dismissedNoticeId) != 0);
+  bool seasonalBannerVisible = showSeasonalCard();
 
   // Button-press wake. Track which button woke the screen so its full
   // press cycle (including long-press) is swallowed — you don't want
@@ -1282,6 +1369,10 @@ void loop() {
         snprintf(cmd, sizeof(cmd), "{\"cmd\":\"notice_ack\",\"id\":\"%s\",\"action\":\"read\"}", tama.noticeId);
         sendCmd(cmd);
       }
+      beep(2400, 30);
+    } else if (seasonalBannerVisible) {
+      seasonalAcknowledge(tama.themeKey, seasonalDayKey());
+      wake();
       beep(2400, 30);
     } else if (resetOpen) {
       beep(2400, 30);

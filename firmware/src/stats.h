@@ -223,12 +223,27 @@ inline void settingsSave() {
 
 static char _petName[24] = "Buddy";
 static char _ownerName[32] = "";
+static char _seasonalAckKey[16] = "";
+static uint32_t _seasonalAckDay = 0;
+static const uint8_t _themeAckSchema = 4;
 
 inline void petNameLoad() {
   _prefs.begin("buddy", true);
   _prefs.getString("petname", _petName, sizeof(_petName));
   _prefs.getString("owner", _ownerName, sizeof(_ownerName));
+  _prefs.getString("theme_key", _seasonalAckKey, sizeof(_seasonalAckKey));
+  _seasonalAckDay = _prefs.getUInt("theme_day", 0);
+  uint8_t themeSchema = _prefs.getUChar("theme_ver", 0);
   _prefs.end();
+  if (themeSchema != _themeAckSchema) {
+    _seasonalAckKey[0] = 0;
+    _seasonalAckDay = 0;
+    _prefs.begin("buddy", false);
+    _prefs.putUChar("theme_ver", _themeAckSchema);
+    _prefs.putString("theme_key", "");
+    _prefs.putUInt("theme_day", 0);
+    _prefs.end();
+  }
 }
 
 // Strip JSON-breaking chars — these names go into a printf'd JSON string
@@ -260,6 +275,21 @@ inline void ownerSet(const char* name) {
 }
 
 inline const char* ownerName() { return _ownerName; }
+
+inline bool seasonalAckedToday(const char* key, uint32_t day) {
+  return key && key[0] && day != 0 && _seasonalAckDay == day && strcmp(_seasonalAckKey, key) == 0;
+}
+
+inline void seasonalAcknowledge(const char* key, uint32_t day) {
+  if (!key || !key[0] || day == 0) return;
+  _safeCopy(_seasonalAckKey, sizeof(_seasonalAckKey), key);
+  _seasonalAckDay = day;
+  _prefs.begin("buddy", false);
+  _prefs.putUChar("theme_ver", _themeAckSchema);
+  _prefs.putString("theme_key", _seasonalAckKey);
+  _prefs.putUInt("theme_day", _seasonalAckDay);
+  _prefs.end();
+}
 
 inline uint8_t speciesIdxLoad() {
   _prefs.begin("buddy", true);

@@ -40,7 +40,6 @@ class StateAggregator:
         self.tokens = 0
         self.tokens_today = 0
         self.last_completed_at = 0.0
-        self._last_theme_pulse = ""
 
     def apply_event(self, payload: dict) -> None:
         session_id = payload.get("session_id") or "default"
@@ -205,9 +204,7 @@ class StateAggregator:
         if self.weather is not None and self.weather.get("board_summary"):
             heartbeat["weather"] = self.weather
         theme = resolve_seasonal_theme(self.config, today=today)
-        theme_pulse_key = f"{theme.key}:{today or date.today()}" if theme is not None else ""
-        if theme is not None and theme_pulse_key != self._last_theme_pulse:
-            self._last_theme_pulse = theme_pulse_key
+        if theme is not None:
             heartbeat["theme"] = {
                 "key": theme.key,
                 "title": theme.title,
