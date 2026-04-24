@@ -1,5 +1,6 @@
 param(
-    [switch]$Clean
+    [switch]$Clean,
+    [string]$PythonExe = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,9 +16,21 @@ if ($Clean) {
     Remove-Item -Recurse -Force $buildDir -ErrorAction SilentlyContinue
 }
 
-Write-Host "Building BuddyParallel from $specPath"
+if (-not $PythonExe) {
+    if ($env:BUDDYPARALLEL_PYTHON) {
+        $PythonExe = $env:BUDDYPARALLEL_PYTHON
+    } elseif (Get-Command python -ErrorAction SilentlyContinue) {
+        $PythonExe = (Get-Command python).Source
+    } elseif (Get-Command py -ErrorAction SilentlyContinue) {
+        $PythonExe = "py"
+    } else {
+        throw "Could not find a Python launcher. Pass -PythonExe explicitly."
+    }
+}
 
-$python = if (Get-Command py -ErrorAction SilentlyContinue) { "py" } else { "python" }
+Write-Host "Building BuddyParallel from $specPath"
+Write-Host "Using Python launcher: $PythonExe"
+
 $baseArgs = @("-m", "PyInstaller", "--noconfirm", "--clean", "--distpath", $distDir, "--workpath", $buildDir, $specPath)
 
-& $python @baseArgs
+& $PythonExe @baseArgs

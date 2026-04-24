@@ -10,6 +10,7 @@ class BuildWindowsScriptTests(unittest.TestCase):
         self.assertIn("PyInstaller", script)
         self.assertIn("buddy_parallel.spec", script)
         self.assertIn("--distpath", script)
+        self.assertIn("PythonExe", script)
 
 
 if __name__ == "__main__":

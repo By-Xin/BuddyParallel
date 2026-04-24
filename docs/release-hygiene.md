@@ -25,6 +25,7 @@ Turn the current developer-friendly BuddyParallel checkout into a Windows build 
 - build script: `companion/scripts/build_windows.ps1`
 - shared launch helper: `companion/app/buddy_parallel/services/launching.py`
 - packaging notes: `buddy-parallel packaging-notes`
+- current slimming strategy: explicitly exclude unrelated scientific, notebook, Qt, and test toolchains from the frozen build
 
 ## Immediate checklist
 
