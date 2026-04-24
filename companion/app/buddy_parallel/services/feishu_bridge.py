@@ -3,15 +3,14 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-import sys
 import threading
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Callable
 
 from buddy_parallel.runtime.config import AppConfig
 from buddy_parallel.runtime.state import StateStore
+from buddy_parallel.services.launching import build_companion_command
 
 
 @dataclass
@@ -90,21 +89,11 @@ class FeishuBridge:
             last_message_summary=last_summary,
         )
 
-    def _helper_command(self, config: AppConfig) -> tuple[list[str], Path]:
-        if getattr(sys, "frozen", False):
-            executable = Path(sys.executable).resolve()
-            return [str(executable), "feishu-helper", "--api-port", str(config.api_server_port)], executable.parent
-
-        companion_dir = Path(__file__).resolve().parents[3]
-        repo_root = companion_dir.parent
-        script = companion_dir / "scripts" / "run_companion.py"
-        return [sys.executable, str(script), "feishu-helper", "--api-port", str(config.api_server_port)], repo_root
-
     def _spawn_process(self, config: AppConfig) -> subprocess.Popen:
-        command, working_dir = self._helper_command(config)
+        launch = build_companion_command("feishu-helper", "--api-port", str(config.api_server_port), windowed=(os.name == "nt"))
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
         self._logger.info("Starting Feishu bridge helper")
-        return subprocess.Popen(command, cwd=str(working_dir), creationflags=creationflags)
+        return subprocess.Popen(launch.command, cwd=str(launch.working_dir), creationflags=creationflags)
 
     def _terminate_process(self) -> None:
         process = self._process

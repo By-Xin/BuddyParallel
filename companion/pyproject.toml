@@ -16,6 +16,11 @@ dependencies = [
   "requests>=2.32,<3",
 ]
 
+[project.scripts]
+buddy-parallel = "buddy_parallel.cli:main"
+buddy-parallel-settings = "buddy_parallel.ui.settings_window:main"
+buddy-parallel-dashboard = "buddy_parallel.ui.dashboard_window:main"
+
 [project.optional-dependencies]
 tray = ["pystray>=0.19", "pillow>=10.0"]
 serial = ["pyserial>=3.5"]

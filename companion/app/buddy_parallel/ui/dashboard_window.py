@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import tkinter as tk
 import urllib.error
 import urllib.request
@@ -17,6 +16,7 @@ from buddy_parallel.ingest.install_hooks import main as install_hooks_main
 from buddy_parallel.runtime.config import CONFIG_PATH, LOG_PATH, RUNTIME_PATH, AppConfig, ConfigStore
 from buddy_parallel.runtime.runtime_config import read_runtime_config
 from buddy_parallel.runtime.state import RuntimeState, StateStore
+from buddy_parallel.services.launching import build_companion_command
 from buddy_parallel.services.updates import UpdateChecker
 
 
@@ -472,8 +472,8 @@ class DashboardWindow:
     def _open_settings(self) -> None:
         if self._settings_process and self._settings_process.poll() is None:
             return
-        script = Path(__file__).resolve().parents[3] / "scripts" / "run_settings.py"
-        self._settings_process = subprocess.Popen([sys.executable, str(script)])
+        launch = build_companion_command("settings", windowed=(os.name == "nt"))
+        self._settings_process = subprocess.Popen(launch.command, cwd=str(launch.working_dir))
 
     def _install_hooks(self) -> None:
         try:

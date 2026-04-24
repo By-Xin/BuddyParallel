@@ -9,7 +9,7 @@ def build_parser() -> argparse.ArgumentParser:
         "command",
         nargs="?",
         default="run",
-        choices=["run", "headless", "status", "hooks", "feishu-helper"],
+        choices=["run", "headless", "status", "hooks", "feishu-helper", "settings", "dashboard", "packaging-notes"],
     )
     parser.add_argument("--api-port", type=int, default=0)
     return parser
@@ -21,6 +21,21 @@ def main() -> None:
         from buddy_parallel.services.feishu_helper import main as feishu_helper_main
 
         raise SystemExit(feishu_helper_main(api_port=args.api_port or None))
+    if args.command == "settings":
+        from buddy_parallel.ui.settings_window import main as settings_main
+
+        settings_main()
+        return
+    if args.command == "dashboard":
+        from buddy_parallel.ui.dashboard_window import main as dashboard_main
+
+        dashboard_main()
+        return
+    if args.command == "packaging-notes":
+        from buddy_parallel.services.packaging import build_notes
+
+        print(build_notes())
+        return
 
     from buddy_parallel.ui.tray_app import BuddyParallelApp
 

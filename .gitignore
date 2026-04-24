@@ -9,6 +9,7 @@ firmware/.platformio_local/
 vscode-extension/.vscode/
 companion/tmp*/
 tmp*/
+.tmp-tests/
 build/
 dist/
 *.spec

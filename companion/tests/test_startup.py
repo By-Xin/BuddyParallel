@@ -1,31 +1,35 @@
 from __future__ import annotations
 
-import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from buddy_parallel.services.launching import LaunchSpec
 from buddy_parallel.services.startup import StartupManager
 
 
 class StartupManagerTests(unittest.TestCase):
     def test_apply_creates_and_removes_startup_script(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            startup_dir = Path(temp_dir) / "Startup"
-            manager = StartupManager(startup_dir=startup_dir)
-            target = Path(temp_dir) / "run_companion.py"
-            target.write_text("print('buddy')\n", encoding="utf-8")
+        startup_dir = Path("C:/BuddyParallelTest/Startup")
+        manager = StartupManager(startup_dir=startup_dir)
+        launch = LaunchSpec(
+            command=["pythonw.exe", "C:/BuddyParallelTest/run_companion.py", "run"],
+            working_dir=Path("C:/BuddyParallelTest"),
+        )
 
-            manager.apply(True, target, ["run"], Path(temp_dir))
+        with patch("pathlib.Path.mkdir") as mkdir_mock, patch("pathlib.Path.write_text") as write_text_mock:
+            manager.apply(True, launch)
 
-            self.assertTrue(manager.entry_path.exists())
-            script = manager.entry_path.read_text(encoding="utf-8")
-            self.assertIn("CreateObject", script)
-            self.assertIn("run_companion.py run", script)
-            self.assertIn(str(Path(temp_dir)), script)
+        mkdir_mock.assert_called_once_with(parents=True, exist_ok=True)
+        script = write_text_mock.call_args.args[0]
+        self.assertIn("CreateObject", script)
+        self.assertIn("run_companion.py run", script)
+        self.assertIn("C:/BuddyParallelTest", script)
 
-            manager.apply(False, target, ["run"], Path(temp_dir))
+        with patch("pathlib.Path.exists", return_value=True), patch("pathlib.Path.unlink") as unlink_mock:
+            manager.apply(False, launch)
 
-            self.assertFalse(manager.entry_path.exists())
+        unlink_mock.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ from buddy_parallel.runtime.logging_utils import configure_logging
 from buddy_parallel.runtime.runtime_config import read_runtime_config
 from buddy_parallel.runtime.state import StateStore
 from buddy_parallel.services.feishu_bridge import FeishuBridge
+from buddy_parallel.services.launching import LaunchSpec, build_companion_command
 from buddy_parallel.services.mqtt_notice_bridge import MqttNoticeBridge
 from buddy_parallel.services.startup import StartupManager
 from buddy_parallel.services.telegram_bridge import TelegramBridge
@@ -509,10 +510,10 @@ class BuddyParallelApp:
         return result
 
     def _open_dashboard(self, icon=None, item=None) -> None:
-        self._dashboard_process = self._launch_ui_script(self._dashboard_process, "run_dashboard.py")
+        self._dashboard_process = self._launch_ui_script(self._dashboard_process, "dashboard")
 
     def _open_settings(self, icon=None, item=None) -> None:
-        self._settings_process = self._launch_ui_script(self._settings_process, "run_settings.py")
+        self._settings_process = self._launch_ui_script(self._settings_process, "settings")
 
     def _install_hooks(self, icon=None, item=None) -> None:
         try:
@@ -704,12 +705,9 @@ class BuddyParallelApp:
 
     def _sync_startup(self, config: AppConfig, notify: bool = False) -> None:
         try:
-            target, arguments, working_dir = self._startup_command()
             self.startup_manager.apply(
                 enabled=config.auto_start,
-                target=target,
-                arguments=arguments,
-                working_dir=working_dir,
+                launch=self._startup_command(),
             )
             if notify:
                 state = "enabled" if config.auto_start else "disabled"
@@ -719,20 +717,15 @@ class BuddyParallelApp:
             if notify:
                 self._notify(f"Launch at startup update failed: {exc}")
 
-    def _startup_command(self) -> tuple[Path, list[str], Path]:
-        if getattr(sys, "frozen", False):
-            return Path(sys.executable).resolve(), [], Path(sys.executable).resolve().parent
-        companion_dir = Path(__file__).resolve().parents[3]
-        repo_root = companion_dir.parent
-        script = companion_dir / "scripts" / "run_companion.py"
-        return script, ["run"], repo_root
+    def _startup_command(self) -> LaunchSpec:
+        return build_companion_command("run", windowed=True)
 
     @staticmethod
-    def _launch_ui_script(process: subprocess.Popen | None, script_name: str) -> subprocess.Popen | None:
+    def _launch_ui_script(process: subprocess.Popen | None, command_name: str) -> subprocess.Popen | None:
         if process and process.poll() is None:
             return process
-        script = Path(__file__).resolve().parents[3] / "scripts" / script_name
-        return subprocess.Popen([sys.executable, str(script)])
+        launch = build_companion_command(command_name, windowed=True)
+        return subprocess.Popen(launch.command, cwd=str(launch.working_dir))
 
     @staticmethod
     def _open_path(path: Path) -> None:

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
+from buddy_parallel.services.launching import LaunchSpec
 
 class StartupManager:
     def __init__(self, startup_dir: Path | None = None, entry_name: str = "BuddyParallel Companion.vbs") -> None:
@@ -17,15 +17,15 @@ class StartupManager:
     def is_enabled(self) -> bool:
         return self.entry_path.exists()
 
-    def apply(self, enabled: bool, target: Path, arguments: list[str] | None = None, working_dir: Path | None = None) -> None:
+    def apply(self, enabled: bool, launch: LaunchSpec) -> None:
         entry = self.entry_path
         if not enabled:
             if entry.exists():
                 entry.unlink()
             return
 
-        working_dir = (working_dir or target.parent).resolve()
-        command = subprocess.list2cmdline([str(self._launcher_path()), str(target.resolve()), *(arguments or [])])
+        working_dir = launch.working_dir.resolve()
+        command = subprocess.list2cmdline([str(part) for part in launch.command])
         script = "\n".join(
             [
                 'Set shell = CreateObject("WScript.Shell")',
@@ -36,15 +36,6 @@ class StartupManager:
 
         entry.parent.mkdir(parents=True, exist_ok=True)
         entry.write_text(script + "\n", encoding="utf-8")
-
-    @staticmethod
-    def _launcher_path() -> Path:
-        executable = Path(sys.executable).resolve()
-        if executable.name.lower() == "python.exe":
-            windowed = executable.with_name("pythonw.exe")
-            if windowed.exists():
-                return windowed
-        return executable
 
     @staticmethod
     def _escape_vbs_string(value: str) -> str:

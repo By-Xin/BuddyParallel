@@ -18,7 +18,7 @@ BuddyParallel keeps the official Hardware Buddy device firmware and UI experienc
 
 ## Current status
 
-BuddyParallel is well past bootstrap. The primary USB companion loop is working, the tray/dashboard/settings surfaces are real, the VS Code bridge is active, and additional notice sources now exist alongside Telegram. The main remaining work is packaging, release hygiene, and deciding which non-Telegram notice transport becomes the long-term default. See `docs/status.md` for the live summary and `docs/roadmap.md` for milestones.
+BuddyParallel is well past bootstrap. The primary USB companion loop is working, the tray/dashboard/settings surfaces are real, the VS Code bridge is active, and additional notice sources now exist alongside Telegram. The main remaining work is packaging, release hygiene, and deciding which non-Telegram notice transport becomes the long-term default. See `docs/status.md` for the live summary, `docs/roadmap.md` for milestones, and `docs/release-hygiene.md` for the current packaging checklist.
 
 ## ASCII buddies
 
