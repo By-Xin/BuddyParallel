@@ -1,6 +1,7 @@
 param(
     [string]$Version = "",
-    [string]$Platform = "windows-x64"
+    [string]$Platform = "windows-x64",
+    [switch]$SkipVsix
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,6 +21,26 @@ foreach ($name in $requiredFirmware) {
     if ($null -eq $match) {
         throw "Packaged firmware artifact not found in ${appDir}: $name"
     }
+}
+
+$vsixPath = ""
+if (-not $SkipVsix) {
+    $vsixScript = Join-Path $repoRoot "vscode-extension\scripts\package_vsix.ps1"
+    if (-not (Test-Path $vsixScript)) {
+        throw "VS Code extension packaging script not found: $vsixScript"
+    }
+    & powershell -ExecutionPolicy Bypass -File $vsixScript -OutputDir $distDir
+    if ($LASTEXITCODE -ne 0) {
+        throw "VS Code extension VSIX packaging failed."
+    }
+    $vsix = Get-ChildItem -Path $distDir -Filter "BuddyParallel-vscode-*.vsix" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($null -eq $vsix) {
+        throw "VS Code extension VSIX was not created."
+    }
+    $vsixPath = $vsix.FullName
+    $extensionDest = Join-Path $appDir "vscode-extension"
+    New-Item -ItemType Directory -Force -Path $extensionDest | Out-Null
+    Copy-Item -LiteralPath $vsixPath -Destination (Join-Path $extensionDest (Split-Path $vsixPath -Leaf)) -Force
 }
 
 if (-not $Version) {

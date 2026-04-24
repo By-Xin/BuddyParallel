@@ -12,6 +12,8 @@ class PackageReleaseZipScriptTests(unittest.TestCase):
         self.assertIn("BuddyParallel.exe", script)
         self.assertIn("BuddyParallel-v$Version-$Platform.zip", script)
         self.assertIn("boot_app0.bin", script)
+        self.assertIn("package_vsix.ps1", script)
+        self.assertIn("vscode-extension", script)
         self.assertIn("Compress-Archive", script)
 
 

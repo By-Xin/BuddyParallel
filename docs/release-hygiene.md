@@ -26,6 +26,7 @@ Turn the current developer-friendly BuddyParallel checkout into a Windows build 
 - build venv bootstrap: `companion/scripts/prepare_build_env.ps1`
 - build script: `companion/scripts/build_windows.ps1` (fails if firmware artifacts are missing unless `-SkipFirmwareCheck` is used)
 - release zip script: `companion/scripts/package_release_zip.ps1`
+- VS Code extension VSIX script: `vscode-extension/scripts/package_vsix.ps1`
 - first-run board setup: `buddy-parallel setup`
 - command-line board flasher: `buddy-parallel flash-board --port COMx`
 - shared launch helper: `companion/app/buddy_parallel/services/launching.py`
@@ -42,13 +43,17 @@ Turn the current developer-friendly BuddyParallel checkout into a Windows build 
 5. `powershell -ExecutionPolicy Bypass -File companion/scripts/smoke_packaged_windows.ps1`
 6. run `BuddyParallel.exe setup` on a clean Windows machine and verify bundled firmware is found
 7. smoke-test core device behavior from the packaged build
-8. `powershell -ExecutionPolicy Bypass -File companion/scripts/package_release_zip.ps1 -Version 0.1.0-alpha.1`
+8. `powershell -ExecutionPolicy Bypass -File vscode-extension/scripts/package_vsix.ps1`
+9. `powershell -ExecutionPolicy Bypass -File companion/scripts/package_release_zip.ps1 -Version 0.1.0-alpha.1`
+
+The release zip includes `vscode-extension/BuddyParallel-vscode-<version>.vsix`. Attach the same VSIX as a separate GitHub Release asset so VS Code users can install it directly with `Extensions: Install from VSIX...`.
 
 ## Immediate checklist
 
 - verify first-run setup opens before the tray runtime starts on a clean config
 - verify setup refuses to flash without an explicit confirmation
 - verify setup saves the selected COM port under `%APPDATA%\BuddyParallel`
+- verify the VSIX installs in VS Code and can reach the local companion API at `http://127.0.0.1:43112`
 - verify a second BuddyParallel launch exits instead of competing for COM or notice bridge resources
 - verify packaged tray launch
 - verify standalone settings and dashboard launch from the packaged build

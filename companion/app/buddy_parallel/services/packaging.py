@@ -38,6 +38,7 @@ def build_notes() -> str:
         Packaging expectations
         ----------------------
         - ship a single Windows-facing BuddyParallel app entrypoint
+        - ship the VS Code integration as a VSIX inside the release zip and as a separate release asset
         - bundle Python dependencies so users do not need pip or Anaconda
         - preserve the companion app dir contract under `%APPDATA%\\BuddyParallel`
         - keep tray, settings, dashboard, and helper launches on the same executable family
@@ -51,6 +52,7 @@ def build_notes() -> str:
         - verify tray launch, dashboard launch, and settings launch from the packaged build
         - verify first-run setup can see the bundled firmware assets
         - verify a clean board can be flashed and then answers `status`
+        - verify the bundled VSIX installs and reaches the local companion API
         - verify startup shortcut creation points to the packaged app, not a repo script
         - verify serial transport on the primary USB board path
         - verify the chosen notice transport end-to-end on a clean machine
@@ -61,6 +63,7 @@ def build_notes() -> str:
         - source diagnostics: `buddy-parallel packaging-notes`
         - prepare build venv: `powershell -ExecutionPolicy Bypass -File companion\\scripts\\prepare_build_env.ps1`
         - Windows build script: `powershell -ExecutionPolicy Bypass -File companion\\scripts\\build_windows.ps1`
+        - VSIX script: `powershell -ExecutionPolicy Bypass -File vscode-extension\\scripts\\package_vsix.ps1`
         - packaged smoke script: `powershell -ExecutionPolicy Bypass -File companion\\scripts\\smoke_packaged_windows.ps1`
         - release zip script: `powershell -ExecutionPolicy Bypass -File companion\\scripts\\package_release_zip.ps1 -Version 0.1.0-alpha.1`
         - PyInstaller spec: `{companion_root() / "packaging" / "buddy_parallel.spec"}`

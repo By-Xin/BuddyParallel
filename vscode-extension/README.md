@@ -32,3 +32,13 @@ Current ambient mirrors:
 4. Approve or deny on the hardware device.
 
 If approved, the extension continues locally. If denied, it cancels the action.
+
+## Beta install
+
+Install the packaged `BuddyParallel-vscode-<version>.vsix` from VS Code:
+
+1. Open the Extensions view.
+2. Choose `...` -> `Install from VSIX...`.
+3. Pick the VSIX from the BuddyParallel release zip or GitHub Release assets.
+
+The BuddyParallel companion should be running before testing the extension commands.
